@@ -1,0 +1,479 @@
+/**
+ * Model glue: on new snapshot or daily reading, recompute, log forecasts, learn from actuals,
+ * fill open forecasts with actuals, and keep accuracy stats. No alarms or tabs here.
+ */
+import type {
+  Daily, DailyReading, DayForecastView, ForecastRecord, Horizon, ModelState, Post, PostForecastView, PostSeen, PostType, Regime, Snapshot, Settings,
+} from '../shared/types';
+import {
+  addDailyReading, addForecast, addSnapshot, allDaily, allForecasts, allPosts, allSnapshots, forecastsFor, getDaily, getPost,
+  putDaily, putForecast, putPost, readingsFor, snapshotsFor, putFollower,
+} from './store';
+import { getModel, getOnboarding, getSettings, setModel, setOnboarding, timezone } from './state';
+import {
+  dailyEod, dayAhead, evalTail, interp, learnDay, learnDow, learnPost, median, mean, postByHoursBeforeMidnight, postForecast,
+  recentTotalsOrLifetime, regimeOf, shiftSDay, typeFactor, MODEL_VERSION, pace as paceOf,
+} from '../model/simple';
+import { resolvePublishedAt } from '../model/urn';
+import { addDaysUtc, daysInMonthUtc, hoursBetween, localHour, tzOffsetMinutes, utcDateOf, utcHourOf, weekdayOfUtcDate, HOUR, fmtLocalTime } from '../shared/time';
+
+export type NewPostHook = (post: Post) => Promise<void> | void;
+let newPostHook: NewPostHook | null = null;
+export function onNewPost(fn: NewPostHook) { newPostHook = fn; }
+
+// ---------- posts and snapshots ----------
+
+export async function ensurePost(seen: PostSeen, now = new Date()): Promise<{ post: Post; created: boolean }> {
+  const existing = await getPost(seen.urn);
+  const tz = await timezone();
+  if (existing) {
+    let changed = false;
+    if (seen.type && seen.type !== 'unknown' && existing.type === 'unknown') { existing.type = seen.type; changed = true; }
+    if (seen.textPreview && !existing.textPreview) { existing.textPreview = seen.textPreview; changed = true; }
+    if (existing.publishedApprox && seen.ageHintHours !== undefined) {
+      const r = resolvePublishedAt(seen.urn, now, { ageHintHours: seen.ageHintHours, localHourOf: d => localHour(d, tz) });
+      if (!r.approx) { existing.publishedAt = r.publishedAt.toISOString(); existing.publishedApprox = false; changed = true; }
+    }
+    if (changed) await putPost(existing);
+    return { post: existing, created: false };
+  }
+  const r = resolvePublishedAt(seen.urn, now, { ageHintHours: seen.ageHintHours, localHourOf: d => localHour(d, tz) });
+  const post: Post = {
+    urn: seen.urn, publishedAt: r.publishedAt.toISOString(), publishedApprox: r.approx,
+    type: seen.type ?? 'unknown', textPreview: seen.textPreview, firstSeenAt: now.toISOString(),
+  };
+  await putPost(post);
+  return { post, created: true };
+}
+
+/** §4.5 precedence: within 10 minutes, post_summary beats feed/post_page. */
+export function latestSnapshot(snaps: Snapshot[]): Snapshot | undefined {
+  if (!snaps.length) return undefined;
+  const last = snaps[snaps.length - 1];
+  const window = snaps.filter(s => hoursBetween(s.observedAt, last.observedAt) <= 10 / 60);
+  return window.find(s => s.source === 'post_summary') ?? last;
+}
+
+export async function ingestSnapshot(snap: Snapshot & { post?: PostSeen }): Promise<PostForecastView | null> {
+  const now = new Date(snap.observedAt);
+  const { post, created } = await ensurePost(snap.post ?? { urn: snap.urn }, now);
+  const snaps = await snapshotsFor(snap.urn);
+  const minute = snap.observedAt.slice(0, 16);
+  const dup = snaps.find(s => s.observedAt.slice(0, 16) === minute && s.source === snap.source);
+  const recent = snaps.filter(s => Math.abs(hoursBetween(s.observedAt, snap.observedAt)) <= 10 / 60);
+  const outranked = snap.source !== 'post_summary' && recent.some(s => s.source === 'post_summary');
+  if (!dup && !outranked) {
+    const { post: _p, ...clean } = snap; void _p;
+    await addSnapshot(clean);
+    snaps.push(clean);
+  }
+  // A post cannot have impressions before it is live.
+  if (new Date(post.publishedAt).getTime() > now.getTime()) {
+    post.publishedAt = new Date(now.getTime() - 60_000).toISOString();
+    post.publishedApprox = true;
+    await putPost(post);
+  }
+  const ageH = hoursBetween(post.publishedAt, now);
+  if (created && ageH < 3 && newPostHook) await newPostHook(post);
+  await checkPostActual(post, snaps);
+  return computePostView(post.urn, snaps);
+}
+
+async function checkPostActual(post: Post, snaps: Snapshot[]) {
+  if (post.actual24h) return;
+  const withH = snaps.map(s => ({ s, h: hoursBetween(post.publishedAt, s.observedAt) })).filter(x => x.h >= 23.5);
+  if (!withH.length) return;
+  const first = withH.sort((a, b) => a.h - b.h)[0];
+  const model = await getModel();
+  let actual: number;
+  if (first.h < 24) actual = first.s.impressions / Math.max(interp(model.sPost, first.h), 0.02);
+  else actual = first.s.impressions;
+  post.actual24h = Math.round(actual);
+  post.actual24hApprox = first.h > 30;
+  await putPost(post);
+  const readings: [number, number][] = snaps
+    .map(s => [hoursBetween(post.publishedAt, s.observedAt), s.impressions] as [number, number])
+    .filter(([h]) => h > 0 && h < 23.5);
+  const next = learnPost(model, readings, post.actual24h, post.type);
+  await setModel(next);
+  await fillForecasts('post', post.urn, post.actual24h, ['24h']);
+}
+
+// ---------- daily ----------
+
+export async function ingestDaily(points: { utcDate: string; impressions: number; engagements?: number }[], observedAt: string, timezoneStr?: string, profileId?: string) {
+  const today = utcDateOf(observedAt);
+  const ob = await getOnboarding();
+  let obChanged = false;
+  if (timezoneStr && ob.timezone !== timezoneStr) { ob.timezone = timezoneStr; obChanged = true; }
+  if (profileId && ob.profileId !== profileId) { ob.profileId = profileId; obChanged = true; }
+  if (!ob.done && ob.step < 2) { ob.step = 2; obChanged = true; }
+  if (obChanged) await setOnboarding(ob);
+
+  for (const p of points) {
+    const prev = await getDaily(p.utcDate);
+    const isFinal = p.utcDate < today;
+    const rec: Daily = {
+      utcDate: p.utcDate, impressions: p.impressions, engagements: p.engagements ?? prev?.engagements,
+      final: isFinal, source: 'analytics', updatedAt: observedAt,
+    };
+    await putDaily(rec);
+    if (p.utcDate === today) {
+      await addDailyReading({ utcDate: today, observedAt, value: p.impressions, source: 'analytics' });
+    } else if (isFinal && (!prev || !prev.final || prev.source !== 'analytics')) {
+      await dayClosed(p.utcDate, p.impressions);
+    }
+  }
+  await logDayForecasts();
+}
+
+export async function ingestTotal7(value: number, observedAt: string) {
+  const today = utcDateOf(observedAt);
+  const daily = await allDaily();
+  const prev6: number[] = [];
+  for (let i = 1; i <= 6; i++) {
+    const d = daily.find(x => x.utcDate === addDaysUtc(today, -i));
+    if (!d) return; // cannot derive without six completed days
+    prev6.push(d.impressions);
+  }
+  const derived = Math.max(value - prev6.reduce((a, b) => a + b, 0), 0);
+  await addDailyReading({ utcDate: today, observedAt, value: derived, source: 'derived' });
+  const cur = await getDaily(today);
+  const fresh = cur && cur.source === 'analytics' && hoursBetween(cur.updatedAt, observedAt) < 3;
+  if (!fresh) await putDaily({ utcDate: today, impressions: derived, final: false, source: 'derived', updatedAt: observedAt });
+  await logDayForecasts();
+}
+
+async function dayClosed(utcDate: string, actual: number) {
+  const model = await getModel();
+  const readings: [number, number][] = (await readingsFor(utcDate))
+    .filter(r => r.source !== 'partial' && utcDateOf(r.observedAt) === utcDate)
+    .map(r => [utcHourOf(r.observedAt), r.value]);
+  let next = learnDay(model, readings, actual);
+  const finals = (await allDaily()).filter(d => d.final);
+  if (finals.length >= 28) {
+    next = { ...next, dow: learnDow(next.dow, finals.slice(-56).map(d => ({ weekday: weekdayOfUtcDate(d.utcDate), value: d.impressions }))) };
+  }
+  await setModel(next);
+  await fillForecasts('day', utcDate, actual, ['eod', 'dayahead']);
+}
+
+export async function ingestPosts(posts: PostSeen[], topPosts?: { urn: string; impressions: number }[]) {
+  const now = new Date();
+  for (const p of posts) await ensurePost(p, now);
+  for (const t of topPosts ?? []) {
+    const post = await getPost(t.urn);
+    if (post && (!post.lifetime || t.impressions > post.lifetime)) { post.lifetime = t.impressions; await putPost(post); }
+  }
+  const ob = await getOnboarding();
+  if (!ob.done) {
+    const all = await allPosts();
+    const snaps = await allSnapshots();
+    const withSnap = new Set(snaps.map(s => s.urn));
+    const youngest = all.sort((a, b) => (a.publishedAt < b.publishedAt ? 1 : -1)).slice(0, 15);
+    ob.postsToRead = youngest.map(p => p.urn);
+    ob.postsRead = youngest.filter(p => withSnap.has(p.urn)).map(p => p.urn);
+    if (ob.step < 3) ob.step = 3;
+    await setOnboarding(ob);
+  }
+}
+
+export async function ingestFollowers(points: { utcDate: string; count: number }[]) {
+  for (const p of points) await putFollower(p);
+}
+
+// ---------- forecasts ----------
+
+async function logForecast(rec: Omit<ForecastRecord, 'createdAt' | 'modelVersion'>) {
+  const existing = await forecastsFor(rec.key);
+  const last = existing.filter(f => f.target === rec.target && f.horizon === rec.horizon).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))[0];
+  if (last && hoursBetween(last.createdAt, new Date()) < 0.25) return;
+  await addForecast({ ...rec, createdAt: new Date().toISOString(), modelVersion: MODEL_VERSION });
+}
+
+async function fillForecasts(target: 'post' | 'day', key: string, actual: number, horizons: Horizon[]) {
+  if (!(actual > 0)) return;
+  const fs = await forecastsFor(key);
+  let touched = false;
+  for (const f of fs) {
+    if (f.target !== target || !horizons.includes(f.horizon) || f.actual !== undefined) continue;
+    f.actual = actual;
+    f.errorPct = (f.point - actual) / actual;
+    f.inBand = f.low <= actual && actual <= f.high;
+    await putForecast(f);
+    touched = true;
+  }
+  if (touched) await calibrateIntervals();
+}
+
+/** §7: widen or narrow sd by 10% when coverage over 20+ forecasts drifts outside 65 to 92%. */
+async function calibrateIntervals() {
+  const fs = (await allForecasts()).filter(f => f.inBand !== undefined);
+  const model = await getModel();
+  const adjust = (xs: ForecastRecord[], cur: number) => {
+    if (xs.length < 20) return cur;
+    const cov = xs.filter(f => f.inBand).length / xs.length;
+    if (cov < 0.65) return Math.min(cur * 1.1, 3);
+    if (cov > 0.92) return Math.max(cur * 0.9, 0.4);
+    return cur;
+  };
+  const post = adjust(fs.filter(f => f.target === 'post').slice(-60), model.sdScale.post);
+  const day = adjust(fs.filter(f => f.target === 'day' && f.horizon === 'eod').slice(-60), model.sdScale.day);
+  if (post !== model.sdScale.post || day !== model.sdScale.day) await setModel({ ...model, sdScale: { post, day } });
+}
+
+export async function recentTotalsFor(model: ModelState): Promise<number[]> {
+  if (model.recentTotals.length >= 3) return model.recentTotals;
+  const posts = await allPosts();
+  const lifetimes = posts.filter(p => p.lifetime).sort((a, b) => (a.publishedAt < b.publishedAt ? -1 : 1)).map(p => p.lifetime!);
+  return recentTotalsOrLifetime(model.recentTotals, lifetimes);
+}
+
+export async function computePostView(urn: string, snaps?: Snapshot[], now = new Date()): Promise<PostForecastView | null> {
+  const post = await getPost(urn);
+  if (!post) return null;
+  const ss = snaps ?? (await snapshotsFor(urn));
+  const latest = latestSnapshot(ss);
+  if (!latest) return null;
+  const model = await getModel();
+  const h = Math.max(hoursBetween(post.publishedAt, latest.observedAt), 0.05);
+  const recent = await recentTotalsFor(model);
+  const tf = model.recentTotals.length >= 3 ? typeFactor(model, post.type) : 1;
+  const f = postForecast(h, latest.impressions, recent, { sPost: model.sPost, typeFactor: tf, inNetworkShare: latest.inNetworkShare, sdScale: model.sdScale.post });
+  const points: [number, number][] = ss.map(s => [hoursBetween(post.publishedAt, s.observedAt), s.impressions]);
+  let gainPerHour: number | undefined;
+  const earlier = [...ss].reverse().find(s => hoursBetween(s.observedAt, latest.observedAt) >= 20 / 60);
+  if (earlier) gainPerHour = (latest.impressions - earlier.impressions) / hoursBetween(earlier.observedAt, latest.observedAt);
+  const tail = evalTail(points, h);
+  const regime: Regime = regimeOf(model.nPostActuals);
+  const view: PostForecastView = {
+    urn, publishedAt: post.publishedAt, hours: h, impressions: latest.impressions,
+    point: post.actual24h ?? f.point, low: f.low, high: f.high, gainPerHour, tailMode: tail.tailMode, regime, type: post.type, observedAt: latest.observedAt,
+  };
+  if (h < 24 && !post.actual24h && hoursBetween(latest.observedAt, now) < 6) {
+    await logForecast({ target: 'post', key: urn, horizon: '24h', point: f.point, low: f.low, high: f.high, shareObserved: f.share, regime, postType: post.type });
+  }
+  return view;
+}
+
+export interface DailyNow { value: number; source: 'analytics' | 'derived' | 'partial' | 'none'; }
+
+export async function dailyNowFor(today: string, now: Date): Promise<DailyNow> {
+  const d = await getDaily(today);
+  if (d && d.source === 'analytics' && hoursBetween(d.updatedAt, now) < 6) return { value: d.impressions, source: 'analytics' };
+  const readings = (await readingsFor(today)).sort((a, b) => (a.observedAt < b.observedAt ? 1 : -1));
+  const derived = readings.find(r => r.source === 'derived');
+  const analytics = readings.find(r => r.source === 'analytics');
+  const best = [analytics, derived].filter(Boolean).sort((a, b) => (a!.observedAt < b!.observedAt ? 1 : -1))[0];
+  if (best) return { value: best.value, source: best.source as 'analytics' | 'derived' };
+  if (d) return { value: d.impressions, source: d.source === 'export' ? 'analytics' : d.source };
+  // Lower bound: today's gains across live posts.
+  const partial = await gainsToday(today);
+  return partial > 0 ? { value: partial, source: 'partial' } : { value: 0, source: 'none' };
+}
+
+async function gainsToday(today: string): Promise<number> {
+  const start = new Date(today + 'T00:00:00Z').getTime();
+  const posts = await allPosts();
+  let sum = 0;
+  for (const p of posts) {
+    if (hoursBetween(p.publishedAt, new Date()) > 72) continue;
+    const ss = await snapshotsFor(p.urn);
+    if (!ss.length) continue;
+    const latest = latestSnapshot(ss)!;
+    const before = [...ss].reverse().find(s => new Date(s.observedAt).getTime() < start);
+    sum += Math.max(latest.impressions - (before?.impressions ?? 0), 0);
+  }
+  return sum;
+}
+
+export async function paceFor(settings: Settings, model: ModelState, today: string): Promise<number> {
+  const daily = await allDaily();
+  const month = today.slice(0, 7);
+  const recorded = daily.filter(d => d.utcDate.startsWith(month) && d.utcDate < today).reduce((a, d) => a + d.impressions, 0);
+  const remainingDays = daysInMonthUtc(today) - Number(today.slice(8, 10)) + 1;
+  const last3 = daily.filter(d => d.utcDate < today).slice(-3).map(d => d.impressions);
+  return paceOf(settings.goal, recorded, remainingDays, last3, weekdayOfUtcDate(today), model.dow);
+}
+
+export async function computeDayView(now = new Date()): Promise<DayForecastView> {
+  const today = utcDateOf(now);
+  const model = await getModel();
+  const settings = await getSettings();
+  const tz = await timezone();
+  const dn = await dailyNowFor(today, now);
+  const u = utcHourOf(now);
+  const f = dailyEod(u, dn.value, { sDay: model.sDay, sdScale: model.sdScale.day });
+  const pace = await paceFor(settings, model, today);
+  const start = new Date(today + 'T00:00:00Z').getTime();
+  const posts = (await allPosts()).filter(p => new Date(p.publishedAt).getTime() >= start && new Date(p.publishedAt).getTime() <= now.getTime());
+  let fromTodayPosts = 0;
+  for (const p of posts) {
+    const l = latestSnapshot(await snapshotsFor(p.urn));
+    if (l) fromTodayPosts += l.impressions;
+  }
+  const regime = regimeOf(model.nPostActuals);
+  const hoursBefore = postByHoursBeforeMidnight(model.sPost);
+  const postByUtc = new Date(start + (24 - hoursBefore) * HOUR);
+  const view: DayForecastView = {
+    utcDate: today, u, dailyNow: dn.value, dailyNowSource: dn.source,
+    point: dn.source === 'none' ? NaN : f.point, low: f.low, high: f.high, pace,
+    fromTodayPosts, fromTails: Math.max(dn.value - fromTodayPosts, 0), regime,
+    postByLocal: fmtLocalTime(postByUtc, tz),
+  };
+  return view;
+}
+
+export async function logDayForecasts(now = new Date()) {
+  const today = utcDateOf(now);
+  const model = await getModel();
+  const settings = await getSettings();
+  const v = await computeDayView(now);
+  const regime = regimeOf(model.nPostActuals);
+  if (v.dailyNowSource !== 'none' && v.dailyNowSource !== 'partial') {
+    const s = Math.max(interp(model.sDay, v.u), 0.02);
+    await logForecast({ target: 'day', key: today, horizon: 'eod', point: v.point, low: v.low, high: v.high, shareObserved: s, regime });
+  }
+  const daily = await allDaily();
+  const rd = model.recentDaily.length >= 3 ? model.recentDaily : daily.filter(d => d.final).slice(-7).map(d => d.impressions);
+  if (rd.length >= 3) {
+    const tomorrow = addDaysUtc(today, 1);
+    const noPost = settings.noPostToday === tomorrow;
+    const p = dayAhead(rd, weekdayOfUtcDate(tomorrow), model.dow, noPost);
+    const sd = 0.30;
+    await logForecast({ target: 'day', key: tomorrow, horizon: 'dayahead', point: p, low: p * Math.exp(-1.28 * sd), high: p * Math.exp(1.28 * sd), shareObserved: 0, regime });
+  }
+}
+
+export async function livePosts(now = new Date()): Promise<PostForecastView[]> {
+  const posts = (await allPosts()).filter(p => hoursBetween(p.publishedAt, now) < 48);
+  const out: PostForecastView[] = [];
+  for (const p of posts) {
+    const v = await computePostView(p.urn, undefined, now);
+    if (v) out.push(v);
+  }
+  return out.sort((a, b) => (a.publishedAt < b.publishedAt ? 1 : -1));
+}
+
+// ---------- accuracy (§7) ----------
+
+export interface AccuracyStats {
+  byHorizon: Record<string, { n: number; mape: number; coverage: number }>;
+  byShare: Record<string, { n: number; mape: number }>;
+  byType: Record<string, { n: number; mape: number }>;
+  eodErrors: { utcDate: string; errorPct: number }[];
+  sdScale: { post: number; day: number };
+}
+
+export async function accuracyStats(now = new Date()): Promise<AccuracyStats> {
+  const cutoff = new Date(now.getTime() - 14 * 24 * HOUR).toISOString();
+  const fs = (await allForecasts()).filter(f => f.actual !== undefined && f.createdAt >= cutoff);
+  const model = await getModel();
+  const agg = (xs: ForecastRecord[]) => ({
+    n: xs.length,
+    mape: xs.length ? mean(xs.map(f => Math.abs(f.errorPct!))) : NaN,
+    coverage: xs.length ? xs.filter(f => f.inBand).length / xs.length : NaN,
+  });
+  const byHorizon: AccuracyStats['byHorizon'] = {};
+  for (const h of ['24h', 'eod', 'dayahead']) byHorizon[h] = agg(fs.filter(f => f.horizon === h));
+  const buckets: [string, (s: number) => boolean][] = [
+    ['<0.25', s => s < 0.25], ['0.25-0.5', s => s >= 0.25 && s < 0.5], ['0.5-0.8', s => s >= 0.5 && s < 0.8], ['>0.8', s => s >= 0.8],
+  ];
+  const byShare: AccuracyStats['byShare'] = {};
+  for (const [k, fn] of buckets) { const a = agg(fs.filter(f => f.horizon !== 'dayahead' && fn(f.shareObserved))); byShare[k] = { n: a.n, mape: a.mape }; }
+  const byType: AccuracyStats['byType'] = {};
+  for (const t of ['video', 'image', 'text', 'document', 'unknown'] as PostType[]) {
+    const a = agg(fs.filter(f => f.target === 'post' && f.postType === t));
+    if (a.n) byType[t] = { n: a.n, mape: a.mape };
+  }
+  const eod = new Map<string, ForecastRecord>();
+  for (const f of fs.filter(f => f.horizon === 'eod')) {
+    const cur = eod.get(f.key);
+    // Keep the mid-afternoon forecast (share closest to 0.66) per day.
+    if (!cur || Math.abs(f.shareObserved - 0.66) < Math.abs(cur.shareObserved - 0.66)) eod.set(f.key, f);
+  }
+  const eodErrors = Array.from(eod.values()).sort((a, b) => (a.key < b.key ? -1 : 1)).map(f => ({ utcDate: f.key, errorPct: f.errorPct! }));
+  return { byHorizon, byShare, byType, eodErrors, sdScale: model.sdScale };
+}
+
+// ---------- onboarding model init (§3.1 step 6) ----------
+
+export async function initModelFromData(): Promise<{ baseline: number; bestHours: number[]; regime: Regime }> {
+  const model = await getModel();
+  const posts = (await allPosts()).sort((a, b) => (a.publishedAt < b.publishedAt ? 1 : -1));
+  const tz = await timezone();
+  const utcHours = posts.filter(p => !p.publishedApprox).slice(0, 10).map(p => utcHourOf(p.publishedAt));
+  let next: ModelState = { ...model };
+  if (utcHours.length >= 3 && model.recentDaily.length === 0) next.sDay = shiftSDay(model.sDay, median(utcHours));
+  const daily = (await allDaily()).filter(d => d.final).slice(-14);
+  if (next.recentDaily.length === 0 && daily.length) next.recentDaily = daily.map(d => d.impressions);
+  await setModel(next);
+  const recent = await recentTotalsFor(next);
+  const baseline = recent.length ? median(recent) : NaN;
+  // Best hours: local publish hours ranked by first-hour reading, or by lifetime when no early reading.
+  const byHour = new Map<number, number[]>();
+  for (const p of posts) {
+    const ss = await snapshotsFor(p.urn);
+    const pts: [number, number][] = ss.map(s => [hoursBetween(p.publishedAt, s.observedAt), s.impressions]);
+    const score = pts.some(([h]) => h <= 3) ? interpAtHour(pts, 1) : (p.lifetime ?? p.actual24h ?? 0);
+    if (!score) continue;
+    const lh = Math.floor(localHour(p.publishedAt, tz));
+    byHour.set(lh, [...(byHour.get(lh) ?? []), score]);
+  }
+  const bestHours = Array.from(byHour).map(([h, xs]) => [h, mean(xs)] as const).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([h]) => h);
+  return { baseline, bestHours, regime: regimeOf(next.nPostActuals) };
+}
+
+function interpAtHour(pts: [number, number][], h: number): number {
+  const sorted = pts.sort((a, b) => a[0] - b[0]);
+  if (!sorted.length) return 0;
+  if (h <= sorted[0][0]) return sorted[0][1] * Math.max(interp({ '1': 0.18, '2': 0.30, '3': 0.40 }, h) / Math.max(interp({ '1': 0.18, '2': 0.30, '3': 0.40 }, sorted[0][0]), 0.02), 0);
+  for (let i = 1; i < sorted.length; i++) if (h <= sorted[i][0]) {
+    const [a, va] = sorted[i - 1], [b, vb] = sorted[i];
+    return va + (vb - va) * (h - a) / (b - a);
+  }
+  return sorted[sorted.length - 1][1];
+}
+
+/** Median first-hour reading across stored posts (for nudge #1 labels). */
+export async function medianFirstHour(): Promise<number | null> {
+  const posts = await allPosts();
+  const xs: number[] = [];
+  for (const p of posts) {
+    const ss = await snapshotsFor(p.urn);
+    const pts: [number, number][] = ss.map(s => [hoursBetween(p.publishedAt, s.observedAt), s.impressions]);
+    if (pts.some(([h]) => h >= 0.5 && h <= 3)) xs.push(interpAtHour(pts, 1));
+  }
+  return xs.length ? median(xs) : null;
+}
+
+/** Best posting slot (§8): next whole local hour in 07..18 with the highest historical first-hour reading. */
+export async function bestSlot(now = new Date()): Promise<number> {
+  const tz = await timezone();
+  const posts = await allPosts();
+  const byHour = new Map<number, number[]>();
+  for (const p of posts) {
+    const ss = await snapshotsFor(p.urn);
+    const pts: [number, number][] = ss.map(s => [hoursBetween(p.publishedAt, s.observedAt), s.impressions]);
+    if (!pts.some(([h]) => h >= 0.5 && h <= 3)) continue;
+    const lh = Math.floor(localHour(p.publishedAt, tz));
+    byHour.set(lh, [...(byHour.get(lh) ?? []), interpAtHour(pts, 1)]);
+  }
+  const total = Array.from(byHour.values()).reduce((a, xs) => a + xs.length, 0);
+  const nowH = Math.ceil(localHour(now, tz));
+  if (total < 5) return Math.max(nowH, 17) <= 18 ? Math.max(nowH, 17) : 17;
+  let best = -1, bv = -Infinity;
+  for (let h = Math.max(nowH, 7); h <= 18; h++) {
+    const v = byHour.has(h) ? mean(byHour.get(h)!) : -1;
+    if (v > bv) { bv = v; best = h; }
+  }
+  return best >= 0 ? best : 17;
+}
+
+export async function goalSuggestion(): Promise<number> {
+  const daily = (await allDaily()).filter(d => d.final).slice(-7);
+  return daily.length ? Math.round(mean(daily.map(d => d.impressions)) * 30) : 0;
+}
+
+export { tzOffsetMinutes, utcDateOf };
+export type { DailyReading };

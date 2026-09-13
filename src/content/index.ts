@@ -1,0 +1,46 @@
+import { URL_PATTERNS, SEL } from './selectors';
+import { readAnalytics } from './readers/analytics';
+import { readPostSummary } from './readers/postSummary';
+import { readFeed } from './readers/feed';
+import { readNotifications } from './readers/notifications';
+import { mountDayOverlay } from './overlay';
+import { waitFor } from './readers/common';
+
+async function run() {
+  const url = location.href;
+  try {
+    if (URL_PATTERNS.analytics.test(url)) {
+      await readAnalytics(document);
+      const anchor = await waitFor(() => {
+        const loader = document.querySelector(SEL.chartLoader);
+        if (loader) return null;
+        return document.querySelector('svg.highcharts-root, [class*="highcharts"], main') as Element | null;
+      }, 12000, 500);
+      if (anchor) void mountDayOverlay((anchor.closest('section') ?? anchor.parentElement ?? anchor) as Element);
+    } else if (URL_PATTERNS.postSummary.test(url)) {
+      await readPostSummary(document, url);
+    } else if (URL_PATTERNS.postPage.test(url)) {
+      await readFeed(document, 'post_page');
+    } else if (URL_PATTERNS.feed.test(url)) {
+      await readFeed(document, 'feed');
+    } else if (URL_PATTERNS.notifications.test(url)) {
+      await readNotifications(document);
+    } else {
+      // Any other LinkedIn page: still pick up own posts and the left-rail total opportunistically.
+      await readFeed(document, 'other');
+    }
+  } catch (e) {
+    console.warn('[lif] reader failed', e);
+  }
+}
+
+// LinkedIn is a SPA: re-run on client-side navigation.
+let lastUrl = location.href;
+setInterval(() => {
+  if (location.href !== lastUrl) {
+    lastUrl = location.href;
+    setTimeout(run, 1500);
+  }
+}, 1000);
+
+run();

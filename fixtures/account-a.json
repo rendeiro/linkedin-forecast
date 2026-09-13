@@ -1,0 +1,686 @@
+{
+  "account": "fictional-a",
+  "timezone": "Europe/Lisbon",
+  "days": [
+    {
+      "utcDate": "2026-08-16",
+      "impressions": 2163
+    },
+    {
+      "utcDate": "2026-08-17",
+      "impressions": 2884
+    },
+    {
+      "utcDate": "2026-08-18",
+      "impressions": 3259
+    },
+    {
+      "utcDate": "2026-08-19",
+      "impressions": 2987
+    },
+    {
+      "utcDate": "2026-08-20",
+      "impressions": 3105
+    },
+    {
+      "utcDate": "2026-08-21",
+      "impressions": 2836
+    },
+    {
+      "utcDate": "2026-08-22",
+      "impressions": 2271
+    },
+    {
+      "utcDate": "2026-08-23",
+      "impressions": 2089
+    },
+    {
+      "utcDate": "2026-08-24",
+      "impressions": 3487
+    },
+    {
+      "utcDate": "2026-08-25",
+      "impressions": 3580
+    },
+    {
+      "utcDate": "2026-08-26",
+      "impressions": 3471
+    },
+    {
+      "utcDate": "2026-08-27",
+      "impressions": 3200
+    },
+    {
+      "utcDate": "2026-08-28",
+      "impressions": 3309
+    },
+    {
+      "utcDate": "2026-08-29",
+      "impressions": 2500
+    },
+    {
+      "utcDate": "2026-08-30",
+      "impressions": 2353
+    },
+    {
+      "utcDate": "2026-08-31",
+      "impressions": 2886
+    },
+    {
+      "utcDate": "2026-09-01",
+      "impressions": 2924
+    },
+    {
+      "utcDate": "2026-09-02",
+      "impressions": 3546
+    },
+    {
+      "utcDate": "2026-09-03",
+      "impressions": 3526
+    },
+    {
+      "utcDate": "2026-09-04",
+      "impressions": 3499
+    },
+    {
+      "utcDate": "2026-09-05",
+      "impressions": 2328
+    },
+    {
+      "utcDate": "2026-09-06",
+      "impressions": 2124
+    },
+    {
+      "utcDate": "2026-09-07",
+      "impressions": 3238
+    },
+    {
+      "utcDate": "2026-09-08",
+      "impressions": 3015
+    },
+    {
+      "utcDate": "2026-09-09",
+      "impressions": 3540
+    },
+    {
+      "utcDate": "2026-09-10",
+      "impressions": 3447
+    },
+    {
+      "utcDate": "2026-09-11",
+      "impressions": 2935
+    },
+    {
+      "utcDate": "2026-09-12",
+      "impressions": 2482
+    }
+  ],
+  "posts": [
+    {
+      "urn": "7495011784458240000",
+      "publishedAt": "2026-08-17T07:01:00.000Z",
+      "type": "text",
+      "actual24h": 3227
+    },
+    {
+      "urn": "7495401603072000000",
+      "publishedAt": "2026-08-18T08:50:00.000Z",
+      "type": "text",
+      "actual24h": 3715
+    },
+    {
+      "urn": "7495745116569600000",
+      "publishedAt": "2026-08-19T07:35:00.000Z",
+      "type": "image",
+      "actual24h": 3768
+    },
+    {
+      "urn": "7496124617195520000",
+      "publishedAt": "2026-08-20T08:43:00.000Z",
+      "type": "text",
+      "actual24h": 4767
+    },
+    {
+      "urn": "7496462342553600000",
+      "publishedAt": "2026-08-21T07:05:00.000Z",
+      "type": "document",
+      "actual24h": 2051
+    },
+    {
+      "urn": "7497572155392000000",
+      "publishedAt": "2026-08-24T08:35:00.000Z",
+      "type": "video",
+      "actual24h": 4800
+    },
+    {
+      "urn": "7497913655623680000",
+      "publishedAt": "2026-08-25T07:12:00.000Z",
+      "type": "image",
+      "actual24h": 2325
+    },
+    {
+      "urn": "7498020358717440000",
+      "publishedAt": "2026-08-25T14:16:00.000Z",
+      "type": "text",
+      "actual24h": 2535
+    },
+    {
+      "urn": "7498302467604480000",
+      "publishedAt": "2026-08-26T08:57:00.000Z",
+      "type": "text",
+      "actual24h": 2055
+    },
+    {
+      "urn": "7498659067330560000",
+      "publishedAt": "2026-08-27T08:34:00.000Z",
+      "type": "text",
+      "actual24h": 2545
+    },
+    {
+      "urn": "7498999560929280000",
+      "publishedAt": "2026-08-28T07:07:00.000Z",
+      "type": "image",
+      "actual24h": 4732
+    },
+    {
+      "urn": "7499743966003200000",
+      "publishedAt": "2026-08-30T08:25:00.000Z",
+      "type": "text",
+      "actual24h": 3814
+    },
+    {
+      "urn": "7500086724526080000",
+      "publishedAt": "2026-08-31T07:07:00.000Z",
+      "type": "document",
+      "actual24h": 3131
+    },
+    {
+      "urn": "7500450873999360000",
+      "publishedAt": "2026-09-01T07:14:00.000Z",
+      "type": "text",
+      "actual24h": 3454
+    },
+    {
+      "urn": "7500590544322560000",
+      "publishedAt": "2026-09-01T16:29:00.000Z",
+      "type": "image",
+      "actual24h": 2113
+    },
+    {
+      "urn": "7500820056637440000",
+      "publishedAt": "2026-09-02T07:41:00.000Z",
+      "type": "text",
+      "actual24h": 4398
+    },
+    {
+      "urn": "7501197543997440000",
+      "publishedAt": "2026-09-03T08:41:00.000Z",
+      "type": "text",
+      "actual24h": 4254
+    },
+    {
+      "urn": "7501536779304960000",
+      "publishedAt": "2026-09-04T07:09:00.000Z",
+      "type": "text",
+      "actual24h": 1829
+    },
+    {
+      "urn": "7502280681062400000",
+      "publishedAt": "2026-09-06T08:25:00.000Z",
+      "type": "image",
+      "actual24h": 3940
+    },
+    {
+      "urn": "7502622181294080000",
+      "publishedAt": "2026-09-07T07:02:00.000Z",
+      "type": "text",
+      "actual24h": 1663
+    }
+  ],
+  "replay": [
+    {
+      "utcDate": "2026-09-08",
+      "actual": 3015,
+      "readings": [
+        {
+          "observedAt": "2026-09-08T08:00:00.000Z",
+          "value": 378
+        },
+        {
+          "observedAt": "2026-09-08T10:00:00.000Z",
+          "value": 965
+        },
+        {
+          "observedAt": "2026-09-08T12:00:00.000Z",
+          "value": 1571
+        },
+        {
+          "observedAt": "2026-09-08T14:00:00.000Z",
+          "value": 1898
+        },
+        {
+          "observedAt": "2026-09-08T16:00:00.000Z",
+          "value": 2344
+        },
+        {
+          "observedAt": "2026-09-08T18:00:00.000Z",
+          "value": 2631
+        },
+        {
+          "observedAt": "2026-09-08T20:00:00.000Z",
+          "value": 2890
+        },
+        {
+          "observedAt": "2026-09-08T22:00:00.000Z",
+          "value": 3127
+        }
+      ]
+    },
+    {
+      "utcDate": "2026-09-09",
+      "actual": 3540,
+      "readings": [
+        {
+          "observedAt": "2026-09-09T08:00:00.000Z",
+          "value": 449
+        },
+        {
+          "observedAt": "2026-09-09T10:00:00.000Z",
+          "value": 1017
+        },
+        {
+          "observedAt": "2026-09-09T12:00:00.000Z",
+          "value": 1724
+        },
+        {
+          "observedAt": "2026-09-09T14:00:00.000Z",
+          "value": 2346
+        },
+        {
+          "observedAt": "2026-09-09T16:00:00.000Z",
+          "value": 2704
+        },
+        {
+          "observedAt": "2026-09-09T18:00:00.000Z",
+          "value": 3143
+        },
+        {
+          "observedAt": "2026-09-09T20:00:00.000Z",
+          "value": 3166
+        },
+        {
+          "observedAt": "2026-09-09T22:00:00.000Z",
+          "value": 3577
+        }
+      ]
+    },
+    {
+      "utcDate": "2026-09-10",
+      "actual": 3447,
+      "readings": [
+        {
+          "observedAt": "2026-09-10T08:00:00.000Z",
+          "value": 406
+        },
+        {
+          "observedAt": "2026-09-10T10:00:00.000Z",
+          "value": 1030
+        },
+        {
+          "observedAt": "2026-09-10T12:00:00.000Z",
+          "value": 1664
+        },
+        {
+          "observedAt": "2026-09-10T14:00:00.000Z",
+          "value": 2305
+        },
+        {
+          "observedAt": "2026-09-10T16:00:00.000Z",
+          "value": 2800
+        },
+        {
+          "observedAt": "2026-09-10T18:00:00.000Z",
+          "value": 3125
+        },
+        {
+          "observedAt": "2026-09-10T20:00:00.000Z",
+          "value": 3357
+        },
+        {
+          "observedAt": "2026-09-10T22:00:00.000Z",
+          "value": 3284
+        }
+      ]
+    },
+    {
+      "utcDate": "2026-09-11",
+      "actual": 2935,
+      "readings": [
+        {
+          "observedAt": "2026-09-11T08:00:00.000Z",
+          "value": 346
+        },
+        {
+          "observedAt": "2026-09-11T10:00:00.000Z",
+          "value": 870
+        },
+        {
+          "observedAt": "2026-09-11T12:00:00.000Z",
+          "value": 1557
+        },
+        {
+          "observedAt": "2026-09-11T14:00:00.000Z",
+          "value": 1865
+        },
+        {
+          "observedAt": "2026-09-11T16:00:00.000Z",
+          "value": 2455
+        },
+        {
+          "observedAt": "2026-09-11T18:00:00.000Z",
+          "value": 2808
+        },
+        {
+          "observedAt": "2026-09-11T20:00:00.000Z",
+          "value": 2846
+        },
+        {
+          "observedAt": "2026-09-11T22:00:00.000Z",
+          "value": 3078
+        }
+      ]
+    },
+    {
+      "utcDate": "2026-09-12",
+      "actual": 2482,
+      "readings": [
+        {
+          "observedAt": "2026-09-12T08:00:00.000Z",
+          "value": 278
+        },
+        {
+          "observedAt": "2026-09-12T10:00:00.000Z",
+          "value": 719
+        },
+        {
+          "observedAt": "2026-09-12T12:00:00.000Z",
+          "value": 1248
+        },
+        {
+          "observedAt": "2026-09-12T14:00:00.000Z",
+          "value": 1639
+        },
+        {
+          "observedAt": "2026-09-12T16:00:00.000Z",
+          "value": 2085
+        },
+        {
+          "observedAt": "2026-09-12T18:00:00.000Z",
+          "value": 2384
+        },
+        {
+          "observedAt": "2026-09-12T20:00:00.000Z",
+          "value": 2452
+        },
+        {
+          "observedAt": "2026-09-12T22:00:00.000Z",
+          "value": 2566
+        }
+      ]
+    }
+  ],
+  "snapshots": [
+    {
+      "urn": "7500590544322560000",
+      "observedAt": "2026-09-01T16:59:00.000Z",
+      "impressions": 205,
+      "source": "post_summary"
+    },
+    {
+      "urn": "7500590544322560000",
+      "observedAt": "2026-09-01T17:29:00.000Z",
+      "impressions": 384,
+      "source": "post_summary"
+    },
+    {
+      "urn": "7500590544322560000",
+      "observedAt": "2026-09-01T18:29:00.000Z",
+      "impressions": 653,
+      "source": "post_summary"
+    },
+    {
+      "urn": "7500590544322560000",
+      "observedAt": "2026-09-01T19:29:00.000Z",
+      "impressions": 784,
+      "source": "post_summary"
+    },
+    {
+      "urn": "7500590544322560000",
+      "observedAt": "2026-09-01T22:29:00.000Z",
+      "impressions": 1297,
+      "source": "post_summary"
+    },
+    {
+      "urn": "7500590544322560000",
+      "observedAt": "2026-09-02T04:29:00.000Z",
+      "impressions": 1826,
+      "source": "post_summary"
+    },
+    {
+      "urn": "7500590544322560000",
+      "observedAt": "2026-09-02T16:29:00.000Z",
+      "impressions": 2203,
+      "source": "post_summary"
+    },
+    {
+      "urn": "7500820056637440000",
+      "observedAt": "2026-09-02T08:11:00.000Z",
+      "impressions": 473,
+      "source": "post_summary"
+    },
+    {
+      "urn": "7500820056637440000",
+      "observedAt": "2026-09-02T08:41:00.000Z",
+      "impressions": 733,
+      "source": "post_summary"
+    },
+    {
+      "urn": "7500820056637440000",
+      "observedAt": "2026-09-02T09:41:00.000Z",
+      "impressions": 1335,
+      "source": "post_summary"
+    },
+    {
+      "urn": "7500820056637440000",
+      "observedAt": "2026-09-02T10:41:00.000Z",
+      "impressions": 1704,
+      "source": "post_summary"
+    },
+    {
+      "urn": "7500820056637440000",
+      "observedAt": "2026-09-02T13:41:00.000Z",
+      "impressions": 2835,
+      "source": "post_summary"
+    },
+    {
+      "urn": "7500820056637440000",
+      "observedAt": "2026-09-02T19:41:00.000Z",
+      "impressions": 3929,
+      "source": "post_summary"
+    },
+    {
+      "urn": "7500820056637440000",
+      "observedAt": "2026-09-03T07:41:00.000Z",
+      "impressions": 4375,
+      "source": "post_summary"
+    },
+    {
+      "urn": "7501197543997440000",
+      "observedAt": "2026-09-03T09:11:00.000Z",
+      "impressions": 409,
+      "source": "post_summary"
+    },
+    {
+      "urn": "7501197543997440000",
+      "observedAt": "2026-09-03T09:41:00.000Z",
+      "impressions": 793,
+      "source": "post_summary"
+    },
+    {
+      "urn": "7501197543997440000",
+      "observedAt": "2026-09-03T10:41:00.000Z",
+      "impressions": 1277,
+      "source": "post_summary"
+    },
+    {
+      "urn": "7501197543997440000",
+      "observedAt": "2026-09-03T11:41:00.000Z",
+      "impressions": 1575,
+      "source": "post_summary"
+    },
+    {
+      "urn": "7501197543997440000",
+      "observedAt": "2026-09-03T14:41:00.000Z",
+      "impressions": 2828,
+      "source": "post_summary"
+    },
+    {
+      "urn": "7501197543997440000",
+      "observedAt": "2026-09-03T20:41:00.000Z",
+      "impressions": 3838,
+      "source": "post_summary"
+    },
+    {
+      "urn": "7501197543997440000",
+      "observedAt": "2026-09-04T08:41:00.000Z",
+      "impressions": 4529,
+      "source": "post_summary"
+    },
+    {
+      "urn": "7501536779304960000",
+      "observedAt": "2026-09-04T07:39:00.000Z",
+      "impressions": 190,
+      "source": "post_summary"
+    },
+    {
+      "urn": "7501536779304960000",
+      "observedAt": "2026-09-04T08:09:00.000Z",
+      "impressions": 331,
+      "source": "post_summary"
+    },
+    {
+      "urn": "7501536779304960000",
+      "observedAt": "2026-09-04T09:09:00.000Z",
+      "impressions": 592,
+      "source": "post_summary"
+    },
+    {
+      "urn": "7501536779304960000",
+      "observedAt": "2026-09-04T10:09:00.000Z",
+      "impressions": 788,
+      "source": "post_summary"
+    },
+    {
+      "urn": "7501536779304960000",
+      "observedAt": "2026-09-04T13:09:00.000Z",
+      "impressions": 1175,
+      "source": "post_summary"
+    },
+    {
+      "urn": "7501536779304960000",
+      "observedAt": "2026-09-04T19:09:00.000Z",
+      "impressions": 1664,
+      "source": "post_summary"
+    },
+    {
+      "urn": "7501536779304960000",
+      "observedAt": "2026-09-05T07:09:00.000Z",
+      "impressions": 1699,
+      "source": "post_summary"
+    },
+    {
+      "urn": "7502280681062400000",
+      "observedAt": "2026-09-06T08:55:00.000Z",
+      "impressions": 397,
+      "source": "post_summary"
+    },
+    {
+      "urn": "7502280681062400000",
+      "observedAt": "2026-09-06T09:25:00.000Z",
+      "impressions": 722,
+      "source": "post_summary"
+    },
+    {
+      "urn": "7502280681062400000",
+      "observedAt": "2026-09-06T10:25:00.000Z",
+      "impressions": 1135,
+      "source": "post_summary"
+    },
+    {
+      "urn": "7502280681062400000",
+      "observedAt": "2026-09-06T11:25:00.000Z",
+      "impressions": 1638,
+      "source": "post_summary"
+    },
+    {
+      "urn": "7502280681062400000",
+      "observedAt": "2026-09-06T14:25:00.000Z",
+      "impressions": 2293,
+      "source": "post_summary"
+    },
+    {
+      "urn": "7502280681062400000",
+      "observedAt": "2026-09-06T20:25:00.000Z",
+      "impressions": 3669,
+      "source": "post_summary"
+    },
+    {
+      "urn": "7502280681062400000",
+      "observedAt": "2026-09-07T08:25:00.000Z",
+      "impressions": 3907,
+      "source": "post_summary"
+    },
+    {
+      "urn": "7502622181294080000",
+      "observedAt": "2026-09-07T07:32:00.000Z",
+      "impressions": 162,
+      "source": "post_summary"
+    },
+    {
+      "urn": "7502622181294080000",
+      "observedAt": "2026-09-07T08:02:00.000Z",
+      "impressions": 303,
+      "source": "post_summary"
+    },
+    {
+      "urn": "7502622181294080000",
+      "observedAt": "2026-09-07T09:02:00.000Z",
+      "impressions": 505,
+      "source": "post_summary"
+    },
+    {
+      "urn": "7502622181294080000",
+      "observedAt": "2026-09-07T10:02:00.000Z",
+      "impressions": 615,
+      "source": "post_summary"
+    },
+    {
+      "urn": "7502622181294080000",
+      "observedAt": "2026-09-07T13:02:00.000Z",
+      "impressions": 1032,
+      "source": "post_summary"
+    },
+    {
+      "urn": "7502622181294080000",
+      "observedAt": "2026-09-07T19:02:00.000Z",
+      "impressions": 1468,
+      "source": "post_summary"
+    },
+    {
+      "urn": "7502622181294080000",
+      "observedAt": "2026-09-08T07:02:00.000Z",
+      "impressions": 1548,
+      "source": "post_summary"
+    }
+  ]
+}

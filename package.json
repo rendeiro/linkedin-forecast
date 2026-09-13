@@ -1,0 +1,26 @@
+{
+  "name": "linkedin-impressions-forecast",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Chrome MV3 extension that forecasts your LinkedIn impressions from pages you already visit. Local only.",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "watch": "node scripts/build.mjs --watch",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "fixture": "node scripts/make-fixture.mjs"
+  },
+  "dependencies": {
+    "preact": "^10.24.3",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.287",
+    "@types/node": "^20.19.43",
+    "esbuild": "^0.24.2",
+    "jsdom": "^25.0.1",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

@@ -38,10 +38,9 @@ export async function mountPostOverlay(card: Element, urn: string) {
   if (!resp || resp.enabled === false) { host.remove(); return; }
   const v = resp.view;
   if (!v) { render(host, 'Forecast pending'); return; }
-  const gain = v.gainPerHour !== undefined ? `${sep}${fmt(v.gainPerHour)}/h` : '';
-  if (v.hours >= 24) { render(host, `24h checkpoint passed${gain}`); return; }
-  const tail = v.tailMode ? `<span class="tag">tail</span>` : '';
-  render(host, `24h ≈ <b>${fmt(v.point)}</b>${gain}${tail}`, '', `80% interval ${fmt(v.low)} to ${fmt(v.high)} · ${v.regime}`);
+  const tip = [v.gainPerHour !== undefined ? `${fmt(v.gainPerHour)} per hour` : '', v.tailMode ? 'tail mode' : '', `80% interval ${fmt(v.low)} to ${fmt(v.high)}`, v.regime].filter(Boolean).join(' · ');
+  if (v.hours >= 24) { render(host, `<b>${fmt(v.impressions)}</b> now${sep}24h passed`, '', tip); return; }
+  render(host, `<b>${fmt(v.impressions)}</b> now${sep}<b>${fmt(v.point)}</b> at 24h`, '', tip);
 }
 
 export async function mountDayOverlay(parent: Element, before?: Element | null) {
@@ -50,7 +49,7 @@ export async function mountDayOverlay(parent: Element, before?: Element | null) 
   if (!resp || resp.enabled === false) { host.remove(); return; }
   const v = resp.view;
   if (!v || v.dailyNowSource === 'none') { render(host, 'No reading for today yet', 'card'); return; }
-  const pace = `${sep}pace <b>${fmt(v.pace)}</b>`;
-  if (v.early) { render(host, `Today <b>${fmt(v.dailyNow)}</b>${sep}EOD from 06:00 UTC${pace}`, 'card'); return; }
-  render(host, `Today <b>${fmt(v.dailyNow)}</b>${sep}EOD ≈ <b>${fmt(v.point)}</b>${pace}`, 'card', `80% interval ${fmt(v.low)} to ${fmt(v.high)} · ${v.regime}`);
+  const tip = `pace needs ${fmt(v.pace)} per day · 80% interval ${fmt(v.low)} to ${fmt(v.high)} · ${v.regime}`;
+  if (v.early) { render(host, `<b>${fmt(v.dailyNow)}</b> now${sep}end of day estimate from 06:00 UTC`, 'card', tip); return; }
+  render(host, `<b>${fmt(v.dailyNow)}</b> now${sep}<b>${fmt(v.point)}</b> by end of day`, 'card', tip);
 }

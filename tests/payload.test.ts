@@ -76,3 +76,18 @@ describe('daily series robustness', () => {
     expect(extractDailySeries(t).length).toBe(3);
   });
 });
+
+describe('chart aria fallback', () => {
+  it('parses Highcharts point labels and differences cumulative mode', async () => {
+    const { readChartAria } = await import('../src/content/readers/analytics');
+    const html = `<div role="button">Cumulative</div><svg>
+      <path aria-label="Saturday, Sep 12, 2026, 20,023. Impressions."></path>
+      <path aria-label="Sunday, Sep 13, 2026, 31,347. Impressions."></path>
+      <path aria-label="Monday, Sep 14, 2026, 31,647. Impressions."></path></svg>`;
+    const d = new DOMParser().parseFromString(html, 'text/html');
+    expect(readChartAria(d, true)).toEqual([
+      { utcDate: '2026-09-12', impressions: 20023 }, { utcDate: '2026-09-13', impressions: 11324 }, { utcDate: '2026-09-14', impressions: 300 },
+    ]);
+    expect(readChartAria(d, false)[1].impressions).toBe(31347);
+  });
+});

@@ -11,12 +11,16 @@ async function run() {
   try {
     if (URL_PATTERNS.analytics.test(url)) {
       await readAnalytics(document);
-      const anchor = await waitFor(() => {
-        const loader = document.querySelector(SEL.chartLoader);
-        if (loader) return null;
-        return document.querySelector('svg.highcharts-root, [class*="highcharts"], main') as Element | null;
+      // Anchor: the chart's own container; the overlay goes right above it, inside the card.
+      const chart = await waitFor(() => {
+        if (document.querySelector(SEL.chartLoader)) return null;
+        return document.querySelector('[aria-label^="Chart"], [data-highcharts-chart], svg.highcharts-root') as Element | null;
       }, 12000, 500);
-      if (anchor) void mountDayOverlay((anchor.closest('section') ?? anchor.parentElement ?? anchor) as Element);
+      if (chart) {
+        let block: Element = chart;
+        for (let i = 0; i < 4 && block.parentElement && block.parentElement.children.length === 1; i++) block = block.parentElement;
+        if (block.parentElement) void mountDayOverlay(block.parentElement, block);
+      }
     } else if (URL_PATTERNS.postSummary.test(url)) {
       await readPostSummary(document, url);
     } else if (URL_PATTERNS.postPage.test(url)) {

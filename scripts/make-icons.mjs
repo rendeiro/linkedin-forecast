@@ -23,12 +23,18 @@ function png(size) {
     raw[y * (size * 4 + 1)] = 0;
     for (let x = 0; x < size; x++) {
       const i = y * (size * 4 + 1) + 1 + x * 4;
-      // bars: three columns rising left to right
-      const col = Math.floor((x / size) * 3);
-      const barTop = size * (0.7 - col * 0.22);
-      const inBar = x % Math.max(1, Math.floor(size / 3)) > Math.floor(size / 12) && y > barTop && y < size * 0.9;
-      const r = inBar ? 0xd8 : 0x2f, g = inBar ? 0xe4 : 0x5d, b = inBar ? 0xc0 : 0x2f;
-      raw[i] = r; raw[i + 1] = g; raw[i + 2] = b; raw[i + 3] = 255;
+      // Monochrome: near-black rounded square, three light bars rising left to right.
+      const rad = size * 0.22;
+      const dx = Math.max(rad - x, x - (size - 1 - rad), 0), dy = Math.max(rad - y, y - (size - 1 - rad), 0);
+      const inside = dx * dx + dy * dy <= rad * rad;
+      const pad = size * 0.22, gap = Math.max(1, size * 0.06);
+      const w = (size - 2 * pad - 2 * gap) / 3;
+      const col = Math.floor((x - pad) / (w + gap));
+      const inCol = x >= pad && x < size - pad && col >= 0 && col <= 2 && (x - pad) - col * (w + gap) < w;
+      const barTop = size * (0.72 - col * 0.17);
+      const inBar = inCol && y >= barTop && y < size - pad;
+      const v = inBar ? 0xf5 : 0x1a;
+      raw[i] = v; raw[i + 1] = v; raw[i + 2] = v; raw[i + 3] = inside ? 255 : 0;
     }
   }
   const ihdr = Buffer.alloc(13);

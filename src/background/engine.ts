@@ -282,6 +282,8 @@ async function gainsToday(today: string): Promise<number> {
     if (!ss.length) continue;
     const latest = latestSnapshot(ss)!;
     const before = [...ss].reverse().find(s => new Date(s.observedAt).getTime() < start);
+    const publishedToday = new Date(p.publishedAt).getTime() >= start;
+    if (!before && !publishedToday) continue; // no baseline: the whole count is not today's gain
     sum += Math.max(latest.impressions - (before?.impressions ?? 0), 0);
   }
   return sum;
@@ -315,9 +317,11 @@ export async function computeDayView(now = new Date()): Promise<DayForecastView>
   const regime = regimeOf(model.nPostActuals);
   const hoursBefore = postByHoursBeforeMidnight(model.sPost);
   const postByUtc = new Date(start + (24 - hoursBefore) * HOUR);
+  const firstKey = Math.min(...Object.keys(model.sDay).map(Number));
+  const early = u < firstKey;
   const view: DayForecastView = {
-    utcDate: today, u, dailyNow: dn.value, dailyNowSource: dn.source,
-    point: dn.source === 'none' ? NaN : f.point, low: f.low, high: f.high, pace,
+    utcDate: today, u, dailyNow: dn.value, dailyNowSource: dn.source, early,
+    point: dn.source === 'none' || early ? NaN : f.point, low: f.low, high: f.high, pace,
     fromTodayPosts, fromTails: Math.max(dn.value - fromTodayPosts, 0), regime,
     postByLocal: fmtLocalTime(postByUtc, tz),
   };
@@ -330,7 +334,7 @@ export async function logDayForecasts(now = new Date()) {
   const settings = await getSettings();
   const v = await computeDayView(now);
   const regime = regimeOf(model.nPostActuals);
-  if (v.dailyNowSource !== 'none' && v.dailyNowSource !== 'partial') {
+  if (v.dailyNowSource !== 'none' && v.dailyNowSource !== 'partial' && !v.early) {
     const s = Math.max(interp(model.sDay, v.u), 0.02);
     await logForecast({ target: 'day', key: today, horizon: 'eod', point: v.point, low: v.low, high: v.high, shareObserved: s, regime });
   }

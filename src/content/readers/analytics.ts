@@ -15,8 +15,11 @@ export async function readAnalytics(doc: Document): Promise<boolean> {
     path = 'rehydrate-late';
   }
   let ok = false;
+  let diag = 'no payload';
   if (text) {
-    const points = extractDailySeries(text);
+    const cumulative = isCumulativeSelected(doc);
+    const points = extractDailySeries(text, { cumulative });
+    diag = `payload ${Math.round(text.length / 1000)}k chars, ${points.length} points${cumulative ? ', cumulative differenced' : ''}, impressions label ${/impressions/i.test(text) ? 'present' : 'absent'}`;
     const timezone = extractTimezone(text) ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
     const profileId = extractProfileId(text) ?? undefined;
     if (points.length) {
@@ -47,6 +50,12 @@ export async function readAnalytics(doc: Document): Promise<boolean> {
     const ids = extractActivityIds(text);
     if (ids.length) await send({ type: 'posts', payload: { posts: ids.map(urn => ({ urn })) } });
   }
-  await health('analytics', ok, ok ? undefined : 'no daily series found', path);
+  await health('analytics', ok, ok ? undefined : `no daily series: ${diag}`, path);
   return ok;
+}
+
+/** The chart's mode dropdown shows "Cumulative" when selected. */
+function isCumulativeSelected(doc: Document): boolean {
+  const els = Array.from(doc.querySelectorAll('button, [role="combobox"], select, [aria-haspopup]'));
+  return els.some(e => /^\s*cumulative\s*$/i.test((e.textContent || (e as HTMLSelectElement).value || '').trim()));
 }

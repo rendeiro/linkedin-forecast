@@ -57,7 +57,8 @@ function Today({ s }: { s: State }) {
     <section>
       <div class="dim">Today so far ({t.dailyNowSource === 'derived' ? 'derived from 7-day total' : t.dailyNowSource === 'partial' ? 'lower bound from live posts' : t.dailyNowSource})</div>
       <div class="big">{none ? '–' : fmt(t.dailyNow)}</div>
-      {!none && (
+      {!none && t.early && <div class="dim" style="margin-top:8px">UTC day just started. EOD forecast from 06:00 UTC.</div>}
+      {!none && !t.early && (
         <div style="margin-top:8px">
           EOD ≈ <b>{fmt(t.point)}</b> <span class="dim">({fmt(t.low)} to {fmt(t.high)})</span>
           <span class={'tag ' + (onPace ? '' : 'warn')}>{onPace ? 'on pace' : 'below pace'}</span>

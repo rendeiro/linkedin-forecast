@@ -64,3 +64,15 @@ describe('feed DOM hooks', () => {
     expect(readTotal7(doc)).toBe(21483);
   });
 });
+
+describe('daily series robustness', () => {
+  it('differences a cumulative series', () => {
+    const t = '{"name":"Impressions","data":[{"y":100,"x":1788307200000},{"y":250,"x":1788393600000},{"y":300,"x":1788480000000}]}';
+    expect(extractDailySeries(t, { cumulative: true }).map(p => p.impressions)).toEqual([100, 150, 50]);
+    expect(extractDailySeries(t).map(p => p.impressions)).toEqual([100, 250, 300]);
+  });
+  it('falls back to the longest day-spaced array when the name is missing', () => {
+    const t = '{"series":[{"data":[{"x":1788307200000,"y":5}]},{"data":[{"x":1788307200000,"y":1},{"x":1788393600000,"y":2},{"x":1788480000000,"y":3}]}]}';
+    expect(extractDailySeries(t).length).toBe(3);
+  });
+});

@@ -31,12 +31,16 @@ export function waitFor<T>(fn: () => T | null | undefined, timeoutMs: number, in
 
 /** Find the card element enclosing an own-post analytics link. */
 export function cardOf(link: Element): Element {
-  let el: Element | null = link;
-  for (let i = 0; i < 12 && el; i++) {
-    if (el.matches('[data-urn], [data-id], article, [role="article"], li, [componentkey], [data-testid*="feed"], [data-testid*="post"]')) return el;
+  // Climb to the whole post: the ancestor that also holds the reaction bar (Like / Comment controls).
+  let el: Element | null = link.parentElement;
+  let fallback: Element | null = null;
+  for (let i = 0; i < 20 && el && el !== document.body; i++) {
+    if (!fallback && el.matches('[data-urn], [data-id], article, [role="article"], li, [componentkey]')) fallback = el;
+    const hasBar = Array.from(el.querySelectorAll('button')).some(b => /^(like|react|comment)\b/i.test((b.getAttribute('aria-label') || b.textContent || '').trim()));
+    if (hasBar && el.querySelectorAll(SEL.ownPostAnalyticsLink).length === 1) return el;
     el = el.parentElement;
   }
-  return link.closest('div') ?? link;
+  return fallback ?? link.closest('div') ?? link;
 }
 
 export function readImpressionsFromCard(card: Element, link: Element): number | null {

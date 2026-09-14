@@ -158,6 +158,7 @@ export interface DayForecastView {
   u: number;
   dailyNow: number;
   dailyNowSource: 'analytics' | 'derived' | 'partial' | 'none';
+  early: boolean;              // before the first S_DAY key: no usable EOD forecast yet
   point: number;
   low: number;
   high: number;

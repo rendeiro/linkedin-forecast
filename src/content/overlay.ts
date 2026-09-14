@@ -12,13 +12,15 @@ const CSS = `
 `;
 
 function ensureHost(parent: Element, id: string): HTMLElement {
-  let host = parent.querySelector<HTMLElement>(`:scope > [data-lif="${id}"]`);
+  // One host per id in the whole document; move it if the card re-rendered elsewhere.
+  let host = document.querySelector<HTMLElement>(`[data-lif="${id}"]`);
   if (!host) {
     host = document.createElement('div');
     host.setAttribute('data-lif', id);
     host.attachShadow({ mode: 'open' });
-    parent.appendChild(host);
   }
+  host.style.cssText = 'display:block;width:100%;flex:0 0 100%;clear:both;';
+  if (host.parentElement !== parent) parent.appendChild(host);
   return host;
 }
 
@@ -34,8 +36,8 @@ export async function mountPostOverlay(card: Element, urn: string) {
   const v = resp.view;
   if (!v) { render(host, `<span class="dim">Forecast pending, reading this post.</span>`); return; }
   const gain = v.gainPerHour !== undefined ? ` · <b>${fmt(v.gainPerHour)}</b>/h` : '';
-  const tail = v.tailMode ? `<span class="tag">tail mode</span>` : '';
   const done = v.hours >= 24;
+  const tail = v.tailMode && !done ? `<span class="tag">tail mode</span>` : '';
   const body = done
     ? `<b>${fmt(v.impressions)}</b> now · 24h checkpoint passed${gain}`
     : `<b>${fmt(v.impressions)}</b> now · 24h ≈ <b>${fmt(v.point)}</b> <span class="dim">(${fmt(v.low)} to ${fmt(v.high)})</span>${gain}`;
@@ -48,5 +50,6 @@ export async function mountDayOverlay(anchor: Element) {
   if (!resp || resp.enabled === false) { host.remove(); return; }
   const v = resp.view;
   if (!v || v.dailyNowSource === 'none') { render(host, `<span class="dim">Today's number not captured yet.</span>`); return; }
+  if (v.early) { render(host, `UTC day just started · <b>${fmt(v.dailyNow)}</b> so far · EOD forecast from 06:00 UTC · pace needs <b>${fmt(v.pace)}</b>/day<span class="tag">${v.regime}</span>`); return; }
   render(host, `Today <b>${fmt(v.dailyNow)}</b> so far · EOD ≈ <b>${fmt(v.point)}</b> <span class="dim">(${fmt(v.low)} to ${fmt(v.high)})</span> · pace needs <b>${fmt(v.pace)}</b>/day<span class="tag">${v.regime}</span>`);
 }

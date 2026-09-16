@@ -1,0 +1,22 @@
+body { margin:0; background:#f4f2ee; font: 14px/1.5 -apple-system, system-ui, "Segoe UI", Roboto, sans-serif; color: rgba(0,0,0,.9); }
+.card { background:#fff; border:1px solid rgba(0,0,0,.08); border-radius:8px; width:640px; margin:24px auto; box-shadow:0 0 0 1px rgba(0,0,0,.02); }
+.hdr { display:flex; gap:12px; padding:16px 16px 8px; }
+.avatar { width:48px; height:48px; border-radius:50%; background:#d9d9d9; flex:none; }
+.name { font-weight:600; } .sub { color: rgba(0,0,0,.6); font-size:12px; }
+.text { padding: 0 16px 12px; }
+.media { height:280px; background: linear-gradient(135deg,#e6e6e6,#cfcfcf); }
+.social { padding: 8px 16px; color: rgba(0,0,0,.6); font-size:13px; border-bottom:1px solid rgba(0,0,0,.08); margin:0 16px; }
+.bar { display:flex; justify-content:space-around; padding: 8px 12px; }
+.bar button { background:none; border:0; font: inherit; font-weight:600; color: rgba(0,0,0,.6); padding: 10px 8px; }
+.analytics { display:flex; justify-content:space-between; align-items:center; padding: 6px 16px 14px; }
+.analytics a { color:#0a66c2; font-weight:600; text-decoration:none; }
+.analytics p { margin:0; font-weight:600; display:inline; }
+.title { font-size:20px; font-weight:600; padding: 20px 24px 8px; }
+.pills { display:flex; gap:8px; padding: 0 24px 12px; }
+.pill { border:1px solid rgba(0,0,0,.6); border-radius:20px; padding:6px 14px; font-weight:600; } .pill::after { content:" ▾"; }
+.big { padding: 4px 24px 0; font-size:28px; font-weight:600; }
+.big span { font-size:16px; color: rgba(0,0,0,.6); font-weight:400; margin-left:6px; }
+.delta { padding: 0 24px 4px; color: rgba(0,0,0,.6); }
+.delta b { color:#0b7a3b; }
+.chartwrap { padding: 0 24px 8px; }
+.foot { padding: 16px 24px 20px; color: rgba(0,0,0,.6); }

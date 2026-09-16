@@ -129,7 +129,7 @@ function chartSvg(history: DayHistory[], eod: number, W: number): string {
     const p = history[ti - 1];
     parts.push(`<line x1="${x(ti - 1)}" y1="${y(p.impressions)}" x2="${x(ti)}" y2="${y(eod)}" stroke="${line}" stroke-width="2.5" stroke-dasharray="6 6" stroke-linecap="round"/>`);
     parts.push(`<circle cx="${x(ti)}" cy="${y(eod)}" r="5" fill="#fff" stroke="${line}" stroke-width="2.5"/>`);
-    parts.push(`<text x="${x(ti) - 12}" y="${y(eod) - 12}" text-anchor="end" class="strong">${fmt(eod)} by end of day</text>`);
+    parts.push(`<text x="${x(ti) - 12}" y="${Math.min(y(eod), y(p.impressions)) - 22}" text-anchor="end" class="strong">${fmt(eod)} by end of day</text>`);
   }
   parts.push(`<circle cx="${x(ti)}" cy="${y(t.impressions)}" r="5" fill="${line}"/>`);
   parts.push(`<text x="${x(ti) - 12}" y="${y(t.impressions) + 24}" text-anchor="end">${fmt(t.impressions)} now</text>`);

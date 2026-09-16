@@ -39,7 +39,11 @@ export function placementFor(link: Element): { parent: Element; before: Element 
     // Stop before any container that holds other posts (carousels, lists).
     if (el.querySelectorAll(SEL.ownPostAnalyticsLink).length > 1 || el.matches('ul, ol, [role="list"], main, section')) return null;
     const bar = Array.from(el.querySelectorAll('button')).filter(b => /^(like|react|comment|repost|send)\b/i.test((b.getAttribute('aria-label') || b.textContent || '').trim())).length;
-    if (bar >= 2 && el.parentElement) return { parent: el.parentElement, before: el.nextElementSibling };
+    if (bar >= 2) {
+      // Reached the whole card: the line goes at its end. Otherwise right after the bar row.
+      if (el.matches('[role="article"], article')) return { parent: el, before: null };
+      if (el.parentElement) return { parent: el.parentElement, before: el.nextElementSibling };
+    }
     el = el.parentElement;
   }
   return null; // bar not hydrated yet: the caller retries on the next scan

@@ -7,14 +7,16 @@ import { mountDayOverlay } from './overlay';
 import { waitFor } from './readers/common';
 
 async function run() {
-  const url = location.href;
+  // Demo pages (docs/demo) force a route with <html data-lif-route="analytics">.
+  const forced = document.documentElement.getAttribute('data-lif-route');
+  const url = forced ? `https://www.linkedin.com/${forced === 'analytics' ? 'analytics/creator/content/' : forced === 'feed' ? 'feed/' : ''}` : location.href;
   try {
     if (URL_PATTERNS.analytics.test(url)) {
       await readAnalytics(document);
       // The card re-renders on the Daily/Cumulative toggle, so re-locate the chart on every pass.
       let lastKey = '';
       const pass = async () => {
-        if (!URL_PATTERNS.analytics.test(location.href)) return;
+        if (!forced && !URL_PATTERNS.analytics.test(location.href)) return;
         if (document.querySelector(SEL.chartLoader)) return;
         const chart = document.querySelector('[aria-label^="Chart"], [data-highcharts-chart], svg.highcharts-root') as Element | null;
         if (!chart) return;

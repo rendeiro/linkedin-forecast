@@ -94,7 +94,7 @@ describe('chart aria fallback', () => {
 
 describe('age label in the current header markup', () => {
   it('reads "2h • Edited •" from a span with a bare text node', () => {
-    const html = `<div role="article"><span><span>Diogo</span></span><span> 2h <span>•</span> Edited <span>•</span></span>
+    const html = `<div role="article"><span><span>Author</span></span><span> 2h <span>•</span> Edited <span>•</span></span>
       <a href="/analytics/post-summary/urn:li:activity:7505901697601384448/">845 impressions</a><span>3d</span></div>`;
     const d = new DOMParser().parseFromString(html, 'text/html');
     expect(readAgeHint(d.querySelector('[role="article"]')!)).toBe(2);

@@ -100,3 +100,16 @@ describe('age label in the current header markup', () => {
     expect(readAgeHint(d.querySelector('[role="article"]')!)).toBe(2);
   });
 });
+
+describe('placement on the saved post page', () => {
+  it('puts the line after the reaction-bar row, not inside it', async () => {
+    const { placementFor } = await import('../src/content/readers/common');
+    const html = `<div><div role="listitem"><button>Like</button><button>Comment</button><button>Repost</button>
+      <a href="/analytics/post-summary/urn:li:activity:7505901697601384448/"><div aria-label="Content analytics"><p>963 impressions</p></div></a></div><div>comments</div></div>`;
+    const d = new DOMParser().parseFromString(html, 'text/html');
+    const link = d.querySelector('a')!;
+    const p = placementFor(link)!;
+    expect(p.parent).toBe(d.querySelector('[role="listitem"]')!.parentElement);
+    expect(p.before?.textContent).toBe('comments');
+  });
+});

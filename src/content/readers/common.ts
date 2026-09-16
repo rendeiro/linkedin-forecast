@@ -29,6 +29,21 @@ export function waitFor<T>(fn: () => T | null | undefined, timeoutMs: number, in
   });
 }
 
+/**
+ * Where the post line goes: as a sibling right after the row that holds the reaction bar and the
+ * analytics link. Never inside that row (it is a flex row and would squeeze LinkedIn's text).
+ */
+export function placementFor(link: Element): { parent: Element; before: Element | null } | null {
+  let el: Element | null = link.parentElement;
+  for (let i = 0; i < 8 && el && el !== document.body; i++) {
+    const bar = Array.from(el.querySelectorAll('button')).filter(b => /^(like|react|comment|repost|send)\b/i.test((b.getAttribute('aria-label') || b.textContent || '').trim())).length;
+    if (bar >= 2 && el.parentElement) return { parent: el.parentElement, before: el.nextElementSibling };
+    el = el.parentElement;
+  }
+  const row = link.closest('[role="listitem"], li, div');
+  return row && row.parentElement ? { parent: row.parentElement, before: row.nextElementSibling } : null;
+}
+
 /** Find the card element enclosing an own-post analytics link. */
 export function cardOf(link: Element): Element {
   // Current build: every post is a [role="article"] with data-urn.

@@ -1,11 +1,11 @@
 import { SEL } from '../selectors';
-import { send, health, cardOf, readImpressionsFromCard, detectPostType, readAgeHint, textPreview, readTotal7 } from './common';
+import { send, health, cardOf, readImpressionsFromCard, detectPostType, readAgeHint, textPreview, readTotal7, placementFor } from './common';
 import { urnFromHref } from '../../model/urn';
 import type { PageType, PostForecastView } from '../../shared/types';
 import { mountPostOverlay } from '../overlay';
 
 const seenMinute = new Map<string, string>();
-const mounted = new Map<string, Element>();
+const mounted = new Map<string, { card: Element; link: Element }>();
 let refreshTimer: number | undefined;
 
 export function scanOwnPosts(doc: Document, page: PageType): number {
@@ -21,7 +21,8 @@ export function scanOwnPosts(doc: Document, page: PageType): number {
     const impressions = readImpressionsFromCard(card, link);
     const minuteKey = new Date().toISOString().slice(0, 16);
     if (impressions === null) continue;
-    mounted.set(urn, card);
+    mounted.set(urn, { card, link });
+    const place = placementFor(link);
     if (seenMinute.get(urn) !== minuteKey) {
       seenMinute.set(urn, minuteKey);
       n++;
@@ -35,15 +36,15 @@ export function scanOwnPosts(doc: Document, page: PageType): number {
         },
       }).then(resp => {
         const r = resp as { view?: PostForecastView | null } | undefined;
-        void mountPostOverlay(card, urn, r?.view ?? undefined);
+        void mountPostOverlay(card, urn, r?.view ?? undefined, place);
       });
     } else {
-      void mountPostOverlay(card, urn);
+      void mountPostOverlay(card, urn, undefined, place);
     }
   }
   if (refreshTimer === undefined) {
     refreshTimer = setInterval(() => {
-      for (const [u, c] of mounted) { if (c.isConnected) void mountPostOverlay(c, u); else mounted.delete(u); }
+      for (const [u, m] of mounted) { if (m.card.isConnected) void mountPostOverlay(m.card, u, undefined, placementFor(m.link)); else mounted.delete(u); }
     }, 60_000) as unknown as number;
   }
   return n;

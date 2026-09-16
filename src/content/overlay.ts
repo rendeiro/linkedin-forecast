@@ -25,7 +25,7 @@ function ensureHost(parent: Element, id: string, before?: Element | null): HTMLE
     host.attachShadow({ mode: 'open' });
   }
   host.style.cssText = 'display:block;width:100%;flex:0 0 100%;clear:both;';
-  if (before && before.parentElement === parent) { if (host.nextElementSibling !== before) parent.insertBefore(host, before); }
+  if (before && before.parentElement === parent) { if (host.parentElement !== parent || host.nextElementSibling !== before) parent.insertBefore(host, before); }
   else if (host.parentElement !== parent) parent.appendChild(host);
   return host;
 }
@@ -37,8 +37,8 @@ function render(host: HTMLElement, html: string, cls = '', title = '') {
 const sep = '<span class="sep">·</span>';
 
 /** Render the one-liner under an own post. Pass `view` when the snapshot reply already carries it. */
-export async function mountPostOverlay(card: Element, urn: string, view?: PostForecastView | null) {
-  const host = ensureHost(card, 'post-' + urn);
+export async function mountPostOverlay(card: Element, urn: string, view?: PostForecastView | null, place?: { parent: Element; before: Element | null } | null) {
+  const host = place ? ensureHost(place.parent, 'post-' + urn, place.before) : ensureHost(card, 'post-' + urn);
   let v = view;
   if (v === undefined) {
     const resp = (await send({ type: 'forecast:post', payload: { urn } })) as { view?: PostForecastView | null; enabled?: boolean } | undefined;
@@ -98,7 +98,7 @@ function chartSvg(history: DayHistory[], eod: number): string {
   // Mirrors LinkedIn's line chart: light horizontal grid, axis labels, one teal line.
   // Solid through completed days to today's current value; dashed from yesterday to the EOD point.
   const W = 800, H = 260, top = 16, bottom = 36, left = 56, right = 24;
-  const line = '#2d6a72';
+  const line = 'rgba(0,0,0,.85)';
   const rawMax = Math.max(1, ...history.map(h => h.impressions), eod);
   const step = niceStep(rawMax / 4);
   const max = Math.ceil(rawMax / step) * step;

@@ -2,6 +2,7 @@ import { readRehydrationText, extractPostSummaryStats } from '../payload';
 import { SEL, RE, URL_PATTERNS } from '../selectors';
 import { send, health, waitFor } from './common';
 import { parseCount } from '../../shared/numbers';
+import { mountPostOverlay } from '../overlay';
 
 export async function readPostSummary(doc: Document, url: string): Promise<boolean> {
   const m = url.match(URL_PATTERNS.postSummary);
@@ -17,8 +18,15 @@ export async function readPostSummary(doc: Document, url: string): Promise<boole
     if (stats.impressions) path = 'rehydrate';
   }
 
-  // DOM/text fallback and lazy sections (up to 10 s).
+  // DOM: the Discovery card renders "<p><span>311</span></p><p>Impressions</p>"; text fallback after.
   const domImpr = await waitFor(() => {
+    const label = Array.from(doc.querySelectorAll('p, span, div')).find(e => e.children.length === 0 && /^impressions$/i.test((e.textContent || '').trim()));
+    const block = label?.parentElement;
+    if (block) {
+      const m = (block.textContent || '').match(/([\d][\d.,]*[kKmM]?)/);
+      const v = m ? parseCount(m[1]) : null;
+      if (v !== null) return v;
+    }
     const body = doc.body?.innerText ?? '';
     const mm = body.match(RE.impressionsAnywhere);
     return mm ? parseCount(mm[1]) : null;
@@ -56,5 +64,12 @@ export async function readPostSummary(doc: Document, url: string): Promise<boole
     },
   });
   await health('post_summary', true, undefined, path);
+  // Post line under the Impressions figure, above the breakdown.
+  const breakdown = doc.querySelector('#impressionsBreakdown, #impressionsBreakdownCA');
+  if (breakdown?.parentElement) {
+    const mount = () => mountPostOverlay(breakdown.parentElement!, urn, undefined, { parent: breakdown.parentElement!, before: breakdown });
+    void mount();
+    setInterval(mount, 60_000);
+  }
   return true;
 }

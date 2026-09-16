@@ -80,34 +80,50 @@ export async function mountDayOverlay(parent: Element, before: Element | null, o
 }
 
 function chartSvg(history: DayHistory[], v: DayForecastView): string {
-  const W = 600, H = 170, top = 28, bottom = 30, left = 8, right = 8;
+  // Mirrors LinkedIn's line chart: light horizontal grid, axis labels, one teal line.
+  // Solid through completed days to today's current value; dashed from yesterday to the EOD point.
+  const W = 800, H = 260, top = 16, bottom = 36, left = 56, right = 24;
+  const line = '#2d6a72';
   const eod = v.early || !Number.isFinite(v.point) ? 0 : v.point;
-  const max = Math.max(1, ...history.map(h => h.impressions), eod);
+  const rawMax = Math.max(1, ...history.map(h => h.impressions), eod);
+  const step = niceStep(rawMax / 4);
+  const max = Math.ceil(rawMax / step) * step;
   const n = history.length;
-  const slot = (W - left - right) / n;
-  const bw = Math.min(slot * 0.56, 64);
+  const x = (i: number) => left + (W - left - right) * (n === 1 ? 0.5 : i / (n - 1));
   const y = (val: number) => top + (H - top - bottom) * (1 - val / max);
   const parts: string[] = [];
+  for (let g = 0; g <= max + 1e-9; g += step) {
+    parts.push(`<line x1="${left}" x2="${W - right}" y1="${y(g)}" y2="${y(g)}" stroke="rgba(0,0,0,.08)"/>`);
+    parts.push(`<text x="${left - 10}" y="${y(g) + 4}" text-anchor="end">${kfmt(g)}</text>`);
+  }
   history.forEach((h, i) => {
-    const x = left + slot * i + (slot - bw) / 2;
     const d = new Date(h.utcDate + 'T00:00:00Z');
-    const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
-    if (h.today) {
-      if (eod > h.impressions) {
-        parts.push(`<rect x="${x}" y="${y(eod)}" width="${bw}" height="${Math.max(0, y(h.impressions) - y(eod))}" rx="2" fill="none" stroke="rgba(0,0,0,.35)" stroke-dasharray="3 3"/>`);
-        parts.push(`<text x="${x + bw / 2}" y="${y(eod) - 8}" text-anchor="middle" class="strong">${fmt(eod)}</text>`);
-        parts.push(`<text x="${x + bw / 2}" y="${y(eod) + 12}" text-anchor="middle" font-size="10">EOD</text>`);
-      } else {
-        parts.push(`<text x="${x + bw / 2}" y="${y(h.impressions) - 8}" text-anchor="middle" class="strong">${fmt(h.impressions)}</text>`);
-      }
-      parts.push(`<rect x="${x}" y="${y(h.impressions)}" width="${bw}" height="${Math.max(1, H - bottom - y(h.impressions))}" rx="2" fill="rgba(0,0,0,.85)"/>`);
-      parts.push(`<text x="${x + bw / 2}" y="${H - 10}" text-anchor="middle" class="strong">Today</text>`);
-    } else {
-      parts.push(`<rect x="${x}" y="${y(h.impressions)}" width="${bw}" height="${Math.max(1, H - bottom - y(h.impressions))}" rx="2" fill="rgba(0,0,0,.18)"/>`);
-      parts.push(`<text x="${x + bw / 2}" y="${y(h.impressions) - 8}" text-anchor="middle">${fmt(h.impressions)}</text>`);
-      parts.push(`<text x="${x + bw / 2}" y="${H - 10}" text-anchor="middle">${label}</text>`);
-    }
+    const label = h.today ? 'Today' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+    parts.push(`<text x="${x(i)}" y="${H - 10}" text-anchor="middle"${h.today ? ' class="strong"' : ''}>${label}</text>`);
   });
-  parts.push(`<line x1="${left}" x2="${W - right}" y1="${H - bottom}" y2="${H - bottom}" stroke="rgba(0,0,0,.12)"/>`);
+  const solid = history.map((h, i) => `${x(i)},${y(h.impressions)}`).join(' ');
+  parts.push(`<polyline points="${solid}" fill="none" stroke="${line}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`);
+  const ti = n - 1, t = history[ti];
+  if (eod > t.impressions && n >= 2) {
+    const p = history[ti - 1];
+    parts.push(`<line x1="${x(ti - 1)}" y1="${y(p.impressions)}" x2="${x(ti)}" y2="${y(eod)}" stroke="${line}" stroke-width="2" stroke-dasharray="5 5" stroke-linecap="round"/>`);
+    parts.push(`<circle cx="${x(ti)}" cy="${y(eod)}" r="4.5" fill="#fff" stroke="${line}" stroke-width="2"/>`);
+    parts.push(`<text x="${x(ti) - 10}" y="${y(eod) - 10}" text-anchor="end" class="strong">${fmt(eod)} by end of day</text>`);
+  }
+  parts.push(`<circle cx="${x(ti)}" cy="${y(t.impressions)}" r="4.5" fill="${line}"/>`);
+  parts.push(`<text x="${x(ti) - 10}" y="${y(t.impressions) + 16}" text-anchor="end">${fmt(t.impressions)} now</text>`);
   return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="height:${H}px">${parts.join('')}</svg>`;
+}
+
+function niceStep(raw: number): number {
+  const pow = Math.pow(10, Math.floor(Math.log10(Math.max(raw, 1))));
+  const m = raw / pow;
+  const f = m <= 1 ? 1 : m <= 2 ? 2 : m <= 2.5 ? 2.5 : m <= 5 ? 5 : 10;
+  return f * pow;
+}
+
+function kfmt(n: number): string {
+  if (n === 0) return '0';
+  if (n >= 1000) { const k = n / 1000; return (Number.isInteger(k) ? k.toFixed(0) : k.toFixed(1)) + 'K'; }
+  return String(Math.round(n));
 }

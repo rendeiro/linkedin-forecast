@@ -7,12 +7,12 @@ const CSS = `
 :host { all: initial; }
 .lif { display:block; font: 12px/16px -apple-system, system-ui, "Segoe UI", Roboto, sans-serif; color: rgba(0,0,0,.6);
   padding: 6px 16px 10px; font-variant-numeric: tabular-nums; letter-spacing: 0; }
-.lif.card { padding: 0 0 12px; font-size: 13px; line-height: 18px; }
+.lif.card { position: relative; padding: 0 0 12px; font-size: 13px; line-height: 18px; }
 .lif b { color: rgba(0,0,0,.9); font-weight: 600; }
 .lif .sep { margin: 0 6px; color: rgba(0,0,0,.3); }
 .lif .tag { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: rgba(0,0,0,.45); margin-left: 8px; }
 .lif .sub { display:block; margin-top: 2px; color: rgba(0,0,0,.6); }
-.lif .toggle { float:right; color: rgba(0,0,0,.45); cursor:pointer; text-decoration: underline; font-size: 12px; }
+.lif .toggle { position:absolute; right:0; top:0; color: rgba(0,0,0,.45); cursor:pointer; text-decoration: underline; font-size: 12px; }
 .lif svg { display:block; margin-top: 12px; overflow: visible; }
 .lif svg text { font: 14px/1 -apple-system, system-ui, "Segoe UI", Roboto, sans-serif; fill: rgba(0,0,0,.6); font-variant-numeric: tabular-nums; }
 .lif svg text.strong { fill: rgba(0,0,0,.9); font-weight: 600; }

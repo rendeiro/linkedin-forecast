@@ -123,18 +123,23 @@ function chartSvg(history: DayHistory[], eod: number, W: number): string {
     if (show || n <= 14) parts.push(`<line x1="${x(i)}" x2="${x(i)}" y1="${H - bottom}" y2="${H - bottom + 6}" stroke="rgba(0,0,0,.12)"/>`);
     if (show) parts.push(`<text x="${x(i)}" y="${H - 12}" text-anchor="middle"${h.today ? ' class="strong"' : ''}>${label}</text>`);
   });
+  // Solid through completed days; today is one dashed segment to the end-of-day point.
+  // The current count already sits in the line above the chart.
   const sw = n > 60 ? 2 : n > 20 ? 2.5 : 3;
-  const solid = history.map((h, i) => `${x(i)},${y(h.impressions)}`).join(' ');
-  parts.push(`<polyline points="${solid}" fill="none" stroke="${line}" stroke-width="${sw}" stroke-linejoin="round" stroke-linecap="round"/>`);
   const ti = n - 1, t = history[ti];
-  if (eod > t.impressions && n >= 2) {
-    const p = history[ti - 1];
-    parts.push(`<line x1="${x(ti - 1)}" y1="${y(p.impressions)}" x2="${x(ti)}" y2="${y(eod)}" stroke="${line}" stroke-width="2.5" stroke-dasharray="6 6" stroke-linecap="round"/>`);
-    parts.push(`<circle cx="${x(ti)}" cy="${y(eod)}" r="5" fill="#fff" stroke="${line}" stroke-width="2.5"/>`);
-    parts.push(`<text x="${x(ti) - 12}" y="${Math.min(y(eod), y(p.impressions)) - 22}" text-anchor="end" class="strong">${fmt(eod)} by end of day</text>`);
+  const completed = history.slice(0, ti);
+  if (completed.length >= 2) {
+    const solid = completed.map((h, i) => `${x(i)},${y(h.impressions)}`).join(' ');
+    parts.push(`<polyline points="${solid}" fill="none" stroke="${line}" stroke-width="${sw}" stroke-linejoin="round" stroke-linecap="round"/>`);
   }
-  parts.push(`<circle cx="${x(ti)}" cy="${y(t.impressions)}" r="5" fill="${line}"/>`);
-  parts.push(`<text x="${x(ti) - 12}" y="${y(t.impressions) + 24}" text-anchor="end">${fmt(t.impressions)} now</text>`);
+  const target = eod > 0 ? eod : t.impressions;
+  if (n >= 2) {
+    const p = history[ti - 1];
+    parts.push(`<line x1="${x(ti - 1)}" y1="${y(p.impressions)}" x2="${x(ti)}" y2="${y(target)}" stroke="${line}" stroke-width="${sw}" stroke-dasharray="6 6" stroke-linecap="round"/>`);
+    parts.push(`<circle cx="${x(ti)}" cy="${y(target)}" r="5" fill="#fff" stroke="${line}" stroke-width="2.5"/>`);
+    const label = eod > 0 ? `${fmt(eod)} by end of day` : `${fmt(t.impressions)} so far`;
+    parts.push(`<text x="${x(ti) - 12}" y="${Math.min(y(target), y(p.impressions)) - 22}" text-anchor="end" class="strong">${label}</text>`);
+  }
   return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${parts.join('')}</svg>`;
 }
 

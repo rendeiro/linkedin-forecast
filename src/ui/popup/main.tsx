@@ -22,7 +22,8 @@ const REGIME_TIP: Record<string, string> = {
 
 function App() {
   const [s, setS] = useState<State | null>(null);
-  const [tab, setTab] = useState<'today' | 'live' | 'goal' | 'accuracy' | 'health'>('today');
+  const initial = (location.hash.slice(1) || 'today') as 'today' | 'live' | 'goal' | 'accuracy' | 'health';
+  const [tab, setTab] = useState<'today' | 'live' | 'goal' | 'accuracy' | 'health'>(['today', 'live', 'goal', 'accuracy', 'health'].includes(initial) ? initial : 'today');
   const [err, setErr] = useState('');
   const load = () => rpc<State>({ type: 'ui:getState' }).then(setS).catch(e => setErr(String(e)));
   useEffect(() => { load(); const t = setInterval(load, 20000); return () => clearInterval(t); }, []);

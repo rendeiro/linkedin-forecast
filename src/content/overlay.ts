@@ -11,6 +11,7 @@ const CSS = `
 .lif b { color: rgba(0,0,0,.9); font-weight: 600; }
 .lif .sep { margin: 0 6px; color: rgba(0,0,0,.3); }
 .lif .tag { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: rgba(0,0,0,.45); margin-left: 8px; }
+.lif .sub { display:block; margin-top: 2px; color: rgba(0,0,0,.6); }
 .lif .toggle { float:right; color: rgba(0,0,0,.45); cursor:pointer; text-decoration: underline; font-size: 12px; }
 .lif svg { display:block; margin-top: 12px; overflow: visible; }
 .lif svg text { font: 14px/1 -apple-system, system-ui, "Segoe UI", Roboto, sans-serif; fill: rgba(0,0,0,.6); font-variant-numeric: tabular-nums; }
@@ -56,32 +57,30 @@ export interface DayHistory { utcDate: string; impressions: number; today: boole
  * Analytics card: one line plus, in Daily view, a bar chart of the last days with today's bar
  * extended to the end-of-day forecast. LinkedIn's own chart is hidden while ours shows.
  */
-export async function mountDayOverlay(parent: Element, before: Element | null, opts: { daily: boolean; chartBlock?: Element | null }) {
+export async function mountDayOverlay(parent: Element, before: Element | null, opts: { daily: boolean; days?: number; chartBlock?: Element | null }) {
   const host = ensureHost(parent, 'day', before);
-  const resp = (await send({ type: 'forecast:day' })) as { view?: DayForecastView; history?: DayHistory[]; enabled?: boolean } | undefined;
+  const days = opts.days ?? 7;
+  const resp = (await send({ type: 'forecast:day', payload: { days } })) as { view?: DayForecastView; history?: DayHistory[]; enabled?: boolean } | undefined;
   if (!resp || resp.enabled === false) { host.remove(); return; }
   const v = resp.view;
   if (!v || v.dailyNowSource === 'none') { render(host, 'Daily impressions: no reading for today yet', 'card'); return; }
   const tip = `pace needs ${fmt(v.pace)} per day · 80% interval ${fmt(v.low)} to ${fmt(v.high)} · ${v.regime}`;
-  // Match LinkedIn's 7-day window: six completed days plus today.
-  const hist = (resp.history ?? []).slice(-7);
+  // Match LinkedIn's selected window: N-1 completed days plus today (as many as were captured).
+  const hist = (resp.history ?? []).slice(-days);
   const eodDaily = v.early || !Number.isFinite(v.point) ? 0 : v.point;
-  let head: string;
-  let points: DayHistory[] = hist;
-  let eod = eodDaily;
-  if (opts.daily) {
-    head = v.early
-      ? `Daily impressions${sep}<b>${fmt(v.dailyNow)}</b> now${sep}end of day estimate from 06:00 UTC`
-      : `Daily impressions${sep}<b>${fmt(v.dailyNow)}</b> now${sep}<b>${fmt(v.point)}</b> by end of day`;
-  } else {
-    let run = 0;
-    points = hist.map(h => ({ ...h, impressions: (run += h.impressions) }));
-    const past = run - v.dailyNow;
-    eod = eodDaily ? past + eodDaily : 0;
-    head = v.early
-      ? `7-day total${sep}<b>${fmt(run)}</b> now${sep}end of day estimate from 06:00 UTC`
-      : `7-day total${sep}<b>${fmt(run)}</b> now${sep}<b>${fmt(eod)}</b> by end of day`;
-  }
+  let run = 0;
+  const cumulative = hist.map(h => ({ ...h, impressions: (run += h.impressions) }));
+  const windowEod = eodDaily ? run - v.dailyNow + eodDaily : 0;
+  const captured = hist.length < days ? ` <span class="sep">·</span>${hist.length} of ${days} days captured` : '';
+  const dayLine = v.early
+    ? `Daily impressions${sep}<b>${fmt(v.dailyNow)}</b> now${sep}end of day estimate from 06:00 UTC`
+    : `Daily impressions${sep}<b>${fmt(v.dailyNow)}</b> now${sep}<b>${fmt(v.point)}</b> by end of day`;
+  const totalLine = v.early
+    ? `${days}-day total${sep}<b>${fmt(run)}</b> now${captured}`
+    : `${days}-day total${sep}<b>${fmt(run)}</b> now${sep}<b>${fmt(windowEod)}</b> by end of day${captured}`;
+  const head = opts.daily ? `${dayLine}<span class="sub">${totalLine}</span>` : `${totalLine}<span class="sub">${dayLine}</span>`;
+  const points: DayHistory[] = opts.daily ? hist : cumulative;
+  const eod = opts.daily ? eodDaily : windowEod;
   if (points.length < 2) { render(host, head, 'card', tip); return; }
 
   // Forecast chart first on every page load; the swap lasts only for this tab session.
@@ -114,16 +113,18 @@ function chartSvg(history: DayHistory[], eod: number, W: number): string {
     parts.push(`<text x="${left - 12}" y="${y(g) + 5}" text-anchor="end">${kfmt(g)}</text>`);
   }
   parts.push(`<line x1="${left}" x2="${left}" y1="${top}" y2="${H - bottom}" stroke="rgba(0,0,0,.12)"/>`);
-  const every = n > 5 ? 2 : 1;
+  // About six x labels whatever the window; ticks only where a label sits on long windows.
+  const every = Math.max(1, Math.round((n - 1) / 6));
   history.forEach((h, i) => {
     const d = new Date(h.utcDate + 'T00:00:00Z');
     const label = h.today ? 'Today' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
-    const show = h.today || (n - 1 - i) % every === 0;
-    parts.push(`<line x1="${x(i)}" x2="${x(i)}" y1="${H - bottom}" y2="${H - bottom + 6}" stroke="rgba(0,0,0,.12)"/>`);
+    const show = h.today || ((n - 1 - i) % every === 0 && n - 1 - i >= every * 0.6);
+    if (show || n <= 14) parts.push(`<line x1="${x(i)}" x2="${x(i)}" y1="${H - bottom}" y2="${H - bottom + 6}" stroke="rgba(0,0,0,.12)"/>`);
     if (show) parts.push(`<text x="${x(i)}" y="${H - 12}" text-anchor="middle"${h.today ? ' class="strong"' : ''}>${label}</text>`);
   });
+  const sw = n > 60 ? 2 : n > 20 ? 2.5 : 3;
   const solid = history.map((h, i) => `${x(i)},${y(h.impressions)}`).join(' ');
-  parts.push(`<polyline points="${solid}" fill="none" stroke="${line}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>`);
+  parts.push(`<polyline points="${solid}" fill="none" stroke="${line}" stroke-width="${sw}" stroke-linejoin="round" stroke-linecap="round"/>`);
   const ti = n - 1, t = history[ti];
   if (eod > t.impressions && n >= 2) {
     const p = history[ti - 1];

@@ -137,7 +137,7 @@ export type ContentMessage =
   | { type: 'followers'; payload: { points: FollowerPoint[] } }
   | { type: 'health'; payload: { page: PageType; ok: boolean; error?: string; path?: string } }
   | { type: 'forecast:post'; payload: { urn: string } }
-  | { type: 'forecast:day' };
+  | { type: 'forecast:day'; payload?: { days?: number } };
 
 export interface PostForecastView {
   urn: string;

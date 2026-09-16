@@ -125,7 +125,7 @@ async function handle(msg: AnyMessage, sender: chrome.runtime.MessageSender): Pr
     case 'forecast:day': {
       const settings = await getSettings();
       if (!settings.overlay) return { enabled: false };
-      return { enabled: true, view: await computeDayView(), history: await dayHistory() };
+      return { enabled: true, view: await computeDayView(), history: await dayHistory(new Date(), msg.payload?.days ?? 7) };
     }
     case 'ui:getState': return uiState();
     case 'ui:setSettings': {

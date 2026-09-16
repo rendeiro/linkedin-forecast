@@ -389,9 +389,10 @@ export async function computeDayView(now = new Date()): Promise<DayForecastView>
 }
 
 /** Last 7 completed days plus today, for the analytics-card chart. */
-export async function dayHistory(now = new Date()): Promise<{ utcDate: string; impressions: number; today: boolean }[]> {
+export async function dayHistory(now = new Date(), days = 7): Promise<{ utcDate: string; impressions: number; today: boolean }[]> {
   const today = utcDateOf(now);
-  const daily = (await allDaily()).filter(d => d.utcDate < today).slice(-7);
+  const n = Math.max(2, Math.min(days, 366));
+  const daily = (await allDaily()).filter(d => d.utcDate < today).slice(-(n - 1));
   const dn = await dailyNowFor(today, now);
   return [...daily.map(d => ({ utcDate: d.utcDate, impressions: d.impressions, today: false })), { utcDate: today, impressions: dn.value, today: true }];
 }

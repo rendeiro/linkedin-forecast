@@ -25,13 +25,14 @@ async function run() {
         const parent = block.parentElement;
         if (!parent) return;
         const daily = isDailySelected(document);
+        const days = periodDays(document);
         if (sessionStorage.getItem('lif:showLinkedInChart') !== '1') (block as HTMLElement).style.display = 'none';
         const host = document.querySelector('[data-lif="day"]');
-        const key = `${daily}:${host?.isConnected ? 'on' : 'off'}`;
+        const key = `${daily}:${days}:${host?.isConnected ? 'on' : 'off'}`;
         const stale = !host || !host.isConnected || host.parentElement !== parent;
         if (stale || key !== lastKey || Date.now() - lastMount > 60_000) {
           lastKey = key; lastMount = Date.now();
-          await mountDayOverlay(parent, block, { daily, chartBlock: block });
+          await mountDayOverlay(parent, block, { daily, days, chartBlock: block });
         }
       };
       let lastMount = 0;
@@ -70,4 +71,13 @@ function isDailySelected(doc: Document): boolean {
   const txt = (e: Element) => (e.textContent || '').trim();
   if (els.some(e => /^cumulative$/i.test(txt(e)))) return false;
   return els.some(e => /^daily$/i.test(txt(e)));
+}
+
+/** The period dropdown reads "7 days", "28 days", "90 days" or "365 days". */
+function periodDays(doc: Document): number {
+  for (const e of Array.from(doc.querySelectorAll('button, [role="button"], [role="combobox"], select'))) {
+    const m = (e.textContent || '').trim().match(/^(\d+)\s*days?$/i);
+    if (m) return Number(m[1]);
+  }
+  return 7;
 }

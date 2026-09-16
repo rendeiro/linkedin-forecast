@@ -2,7 +2,7 @@
 import type { ContentMessage, Post, Settings } from '../shared/types';
 import {
   ingestSnapshot, ingestDaily, ingestTotal7, ingestPosts, ingestFollowers, computePostView, computeDayView, livePosts,
-  accuracyStats, onNewPost, initModelFromData, goalSuggestion, logDayForecasts, ensurePost, dayHistory, rebuildModel,
+  accuracyStats, onNewPost, initModelFromData, goalSuggestion, logDayForecasts, ensurePost, dayHistory, rebuildModel, goalView,
 } from './engine';
 import { getSettings, setSettings, getModel, setModel, getOnboarding, setOnboarding, getHealth, timezone, getLocal, setLocal } from './state';
 import { allDaily, allPosts, allSnapshots, dumpAll, restoreAll, clearAll, putDaily, putPost, getPost, addSnapshot, putFollower, allNudges, type Dump } from './store';
@@ -171,10 +171,10 @@ async function uiState() {
   const onboarding = await getOnboarding();
   const health = await getHealth();
   const daily = await allDaily();
-  const [today, live, accuracy, av] = await Promise.all([computeDayView(now), livePosts(now), accuracyStats(now), avStatus()]);
+  const [today, live, accuracy, av, goal] = await Promise.all([computeDayView(now), livePosts(now), accuracyStats(now), avStatus(), goalView(now)]);
   const posts = await allPosts();
   return {
-    now: now.toISOString(), settings, onboarding, health, today, live, accuracy, autovisit: av,
+    now: now.toISOString(), settings, onboarding, health, today, live, accuracy, autovisit: av, goal,
     model: { regime: regimeOf(model.nPostActuals), nPostActuals: model.nPostActuals, recentTotals: model.recentTotals, recentDaily: model.recentDaily, sdScale: model.sdScale },
     daily: daily.slice(-28),
     goalSuggestion: await goalSuggestion(),

@@ -150,9 +150,28 @@ export interface PostForecastView {
   total24?: number;            // internal scale estimate
   gainPerHour?: number;
   tailMode: boolean;
+  status: 'starting' | 'rising' | 'slowing' | 'tail';
+  series: [number, number][];  // [hours since publish, impressions], subsampled
+  textPreview?: string;
   regime: Regime;
   type: PostType;
   observedAt: string;
+}
+
+export interface GoalView {
+  target: number;               // monthly target, 0 when unset
+  recordedMonth: number;        // completed days this month
+  todayEod: number;
+  monthEod: number;             // recorded + today's EOD
+  daysLeft: number;             // including today
+  paceNeeded: number;           // per day, from today
+  expectedByNow: number;        // target * elapsed share of the month
+  postedToday: number;
+  verdict: 'set-target' | 'post-first' | 'on-pace' | 'post-again' | 'too-late';
+  secondPostAdd: number;
+  bestSlot: number;
+  postByLocal?: string;
+  suggestion: number;
 }
 
 export interface DayForecastView {

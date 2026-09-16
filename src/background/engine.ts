@@ -3,7 +3,7 @@
  * fill open forecasts with actuals, and keep accuracy stats. No alarms or tabs here.
  */
 import type {
-  Daily, DailyReading, DayForecastView, ForecastRecord, Horizon, ModelState, Post, PostForecastView, PostSeen, PostType, Regime, Snapshot, Settings,
+  Daily, DailyReading, DayForecastView, GoalView, ForecastRecord, Horizon, ModelState, Post, PostForecastView, PostSeen, PostType, Regime, Snapshot, Settings,
 } from '../shared/types';
 import {
   addDailyReading, addForecast, addSnapshot, allDaily, allForecasts, allPosts, allSnapshots, forecastsFor, getDaily, getPost,
@@ -11,7 +11,7 @@ import {
 } from './store';
 import { getModel, getOnboarding, getSettings, setModel, setOnboarding, timezone } from './state';
 import {
-  dailyEod, dayAhead, evalTail, interp, learnDay, learnDow, learnPost, median, mean, postByHoursBeforeMidnight, postEod, initialModel,
+  dailyEod, dayAhead, evalTail, interp, learnDay, learnDow, learnPost, median, mean, postByHoursBeforeMidnight, postEod, initialModel, secondPostAdd as secondPostAddFn,
   recentTotalsOrLifetime, regimeOf, shiftSDay, typeFactor, MODEL_VERSION, pace as paceOf,
 } from '../model/simple';
 import { resolvePublishedAt } from '../model/urn';
@@ -278,9 +278,14 @@ export async function computePostView(urn: string, snaps?: Snapshot[], now = new
   if (earlier) gainPerHour = (latest.impressions - earlier.impressions) / hoursBetween(earlier.observedAt, latest.observedAt);
   const tail = evalTail(points, h);
   const regime: Regime = regimeOf(model.nPostActuals);
+  const ratio = tail.firstHourGain > 0 ? tail.lastHourGain / tail.firstHourGain : 1;
+  const status: PostForecastView['status'] = h < 1.5 || points.length < 2 ? 'starting' : ratio >= 0.5 ? 'rising' : ratio >= 0.2 ? 'slowing' : 'tail';
+  const step = Math.max(1, Math.ceil(points.length / 40));
+  const series = points.filter((_, i) => i % step === 0 || i === points.length - 1);
   const view: PostForecastView = {
     urn, publishedAt: post.publishedAt, hours: h, impressions: latest.impressions,
-    point: f.point, low: f.low, high: f.high, total24: f.total24, gainPerHour, tailMode: tail.tailMode, regime, type: post.type, observedAt: latest.observedAt,
+    point: f.point, low: f.low, high: f.high, total24: f.total24, gainPerHour, tailMode: tail.tailMode, status, series, textPreview: post.textPreview,
+    regime, type: post.type, observedAt: latest.observedAt,
   };
   if (h < 24 && !post.actual24h && hoursBetween(latest.observedAt, now) < 6) {
     const sd = 0.08 + 0.45 * (1 - Math.min(f.share, 1));
@@ -426,6 +431,44 @@ export async function livePosts(now = new Date()): Promise<PostForecastView[]> {
     if (v) out.push(v);
   }
   return out.sort((a, b) => (a.publishedAt < b.publishedAt ? 1 : -1));
+}
+
+// ---------- goal decision ----------
+
+export async function goalView(now = new Date()): Promise<GoalView> {
+  const settings = await getSettings();
+  const model = await getModel();
+  const tz = await timezone();
+  const today = utcDateOf(now);
+  const day = await computeDayView(now);
+  const daily = await allDaily();
+  const month = today.slice(0, 7);
+  const recordedMonth = daily.filter(d => d.utcDate.startsWith(month) && d.utcDate < today).reduce((a, d) => a + d.impressions, 0);
+  const dim = daysInMonthUtc(today);
+  const dom = Number(today.slice(8, 10));
+  const daysLeft = dim - dom + 1;
+  const target = settings.goal.kind === 'monthly' ? settings.goal.value : settings.goal.kind === 'daily' ? settings.goal.value * dim : 0;
+  const todayEod = Number.isFinite(day.point) ? day.point : day.dailyNow;
+  const paceNeeded = target > 0 ? Math.max(target - recordedMonth, 0) / daysLeft : 0;
+  const expectedByNow = target > 0 ? target * (dom - 1 + Math.min(day.u / 24, 1)) / dim : 0;
+  const start = new Date(today + 'T00:00:00Z').getTime();
+  const postedToday = (await allPosts()).filter(p => new Date(p.publishedAt).getTime() >= start && new Date(p.publishedAt).getTime() <= now.getTime()).length;
+  const recent = await recentTotalsFor(model);
+  const slot = await bestSlot(now);
+  const lh = localHour(now, tz);
+  const slotUtcOffsetH = (lh - utcHourOf(now) + 48) % 24;
+  const hRemaining = 24 - ((slot - slotUtcOffsetH + 24) % 24);
+  const secondPostAdd = recent.length ? secondPostAddFn(median(recent), hRemaining, model.sPost) : 0;
+  let verdict: GoalView['verdict'];
+  if (target <= 0) verdict = 'set-target';
+  else if (postedToday === 0) verdict = 'post-first';
+  else if (todayEod >= paceNeeded) verdict = 'on-pace';
+  else if (lh >= 19) verdict = 'too-late';
+  else verdict = 'post-again';
+  return {
+    target, recordedMonth, todayEod, monthEod: recordedMonth + todayEod, daysLeft, paceNeeded, expectedByNow, postedToday,
+    verdict, secondPostAdd, bestSlot: slot, postByLocal: day.postByLocal, suggestion: await goalSuggestion(),
+  };
 }
 
 // ---------- accuracy (§7) ----------

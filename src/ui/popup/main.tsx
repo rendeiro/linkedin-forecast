@@ -3,12 +3,12 @@ import { useEffect, useState } from 'preact/hooks';
 import { rpc } from '../rpc';
 import { fmt, pct } from '../../shared/numbers';
 import { fmtLocalTime } from '../../shared/time';
-import type { DayForecastView, PostForecastView, Settings, Onboarding, CaptureHealth, Daily } from '../../shared/types';
+import type { DayForecastView, PostForecastView, Settings, Onboarding, CaptureHealth, Daily, GoalView } from '../../shared/types';
 import type { AccuracyStats } from '../../background/engine';
 
 interface State {
   now: string; settings: Settings; onboarding: Onboarding; health: CaptureHealth; today: DayForecastView; live: PostForecastView[];
-  accuracy: AccuracyStats; autovisit: { count: number; failures: number; backoff: number; lastOkAt?: string; lastFailAt?: string };
+  goal: GoalView; accuracy: AccuracyStats; autovisit: { count: number; failures: number; backoff: number; lastOkAt?: string; lastFailAt?: string };
   model: { regime: string; nPostActuals: number; recentTotals: number[]; recentDaily: number[]; sdScale: { post: number; day: number } };
   daily: Daily[]; goalSuggestion: number; timezone?: string; analyticsUrl: string;
   postsToRead: { urn: string; read: boolean; url: string; post?: { publishedAt: string; type: string; textPreview?: string } }[];
@@ -22,8 +22,8 @@ const REGIME_TIP: Record<string, string> = {
 
 function App() {
   const [s, setS] = useState<State | null>(null);
-  const initial = (location.hash.slice(1) || 'today') as 'today' | 'live' | 'goal' | 'accuracy' | 'health';
-  const [tab, setTab] = useState<'today' | 'live' | 'goal' | 'accuracy' | 'health'>(['today', 'live', 'goal', 'accuracy', 'health'].includes(initial) ? initial : 'today');
+  const initial = (location.hash.slice(1) || 'today') as Tab;
+  const [tab, setTab] = useState<Tab>((TABS as readonly string[]).includes(initial) ? initial : 'today');
   const [err, setErr] = useState('');
   const load = () => rpc<State>({ type: 'ui:getState' }).then(setS).catch(e => setErr(String(e)));
   useEffect(() => { load(); const t = setInterval(load, 20000); return () => clearInterval(t); }, []);
@@ -37,39 +37,71 @@ function App() {
         <span class="tag" title={REGIME_TIP[s.model.regime]}>{s.model.regime}</span>
       </header>
       <nav>
-        {(['today', 'live', 'goal', 'accuracy', 'health'] as const).map(t => (
-          <button class={tab === t ? 'on' : ''} onClick={() => setTab(t)}>{t[0].toUpperCase() + t.slice(1)}</button>
-        ))}
+        {TABS.map(t => <button class={tab === t ? 'on' : ''} onClick={() => setTab(t)}>{t[0].toUpperCase() + t.slice(1)}</button>)}
       </nav>
-      {tab === 'today' && <Today s={s} />}
-      {tab === 'live' && <Live s={s} />}
-      {tab === 'goal' && <Goal s={s} reload={load} />}
+      {tab === 'today' && <Today s={s} reload={load} />}
+      {tab === 'posts' && <Posts s={s} />}
       {tab === 'accuracy' && <Accuracy s={s} />}
       {tab === 'health' && <Health s={s} reload={load} />}
     </>
   );
 }
 
-function Today({ s }: { s: State }) {
-  const t = s.today;
+const TABS = ['today', 'posts', 'accuracy', 'health'] as const;
+type Tab = typeof TABS[number];
+
+function Today({ s, reload }: { s: State; reload: () => void }) {
+  const t = s.today, g = s.goal;
   const none = t.dailyNowSource === 'none';
-  const onPace = Number.isFinite(t.point) && t.point >= t.pace;
+  const [editing, setEditing] = useState(false);
+  const [target, setTarget] = useState(g.target || g.suggestion);
+  const save = async () => {
+    await rpc({ type: 'ui:setSettings', payload: { ...s.settings, goal: { kind: 'monthly', value: Number(target) } } });
+    setEditing(false); reload();
+  };
+  const verdict: Record<GoalView['verdict'], [string, string]> = {
+    'set-target': ['Set a monthly target', `Suggestion from your last 7 days: ${fmt(g.suggestion)}.`],
+    'post-first': ['No post yet today', `Post by ${g.postByLocal ?? '–'} for a normal day. Pace needed: ${fmt(g.paceNeeded)} a day.`],
+    'on-pace': ['On pace. No second post needed', `Today heads to ${fmt(g.todayEod)} against ${fmt(g.paceNeeded)} needed a day.`],
+    'post-again': ['Post again today', `Today heads to ${fmt(g.todayEod)}, ${fmt(g.paceNeeded - g.todayEod)} short of the ${fmt(g.paceNeeded)} needed a day. A post at ${String(g.bestSlot).padStart(2, '0')}:00 adds about ${fmt(g.secondPostAdd)}.`],
+    'too-late': ['Below pace, too late for a second post', `Today heads to ${fmt(g.todayEod)} against ${fmt(g.paceNeeded)} needed a day. Tomorrow needs ${fmt((g.target - g.recordedMonth - g.todayEod) / Math.max(g.daysLeft - 1, 1))}.`],
+  };
+  const [head, body] = verdict[g.verdict];
+  const pct = g.target > 0 ? Math.min(g.monthEod / g.target, 1) : 0;
+  const pctNow = g.target > 0 ? Math.min(g.expectedByNow / g.target, 1) : 0;
   return (
     <section>
-      <div class="dim">Daily impressions so far{t.dailyNowSource === 'derived' ? ' (derived from the 7-day total)' : t.dailyNowSource === 'partial' ? ' (lower bound from live posts)' : ''}</div>
-      <div class="big">{none ? '–' : fmt(t.dailyNow)}</div>
-      {!none && t.early && <div class="dim" style="margin-top:8px">UTC day just started. EOD forecast from 06:00 UTC.</div>}
-      {!none && !t.early && (
-        <div style="margin-top:8px">
-          End of day ≈ <b>{fmt(t.point)}</b> <span class="dim">({fmt(t.low)} to {fmt(t.high)})</span>
-          <span class={'tag ' + (onPace ? '' : 'warn')}>{onPace ? 'on pace' : 'below pace'}</span>
+      <div class="dim">Daily impressions</div>
+      <div class="big">{none ? '–' : fmt(t.dailyNow)} <span class="dim" style="font-size:15px; font-weight:400">now</span></div>
+      {!none && !t.early && <div style="margin-top:4px"><b>{fmt(t.point)}</b> by end of day <span class="dim">({fmt(t.low)} to {fmt(t.high)})</span></div>}
+      {!none && t.early && <div class="dim" style="margin-top:4px">End of day estimate from 06:00 UTC.</div>}
+      {none && <div class="note" style="margin-top:8px">No reading for today yet. Open <a href={s.analyticsUrl} target="_blank">your analytics</a> once.</div>}
+
+      <div class="decision">
+        <div class="decision-head">{head}</div>
+        <div class="dim">{body}</div>
+      </div>
+
+      <h2>Month</h2>
+      {g.target > 0 && !editing ? (<>
+        <div class="row"><span>Target</span><span><b>{fmt(g.target)}</b> <a href="#" onClick={e => { e.preventDefault(); setEditing(true); }}>edit</a></span></div>
+        <div class="row"><span>Recorded so far</span><span>{fmt(g.recordedMonth)}</span></div>
+        <div class="row"><span>With today's end of day</span><span>{fmt(g.monthEod)}</span></div>
+        <div class="row"><span>Needed per day, {g.daysLeft} days left</span><b>{fmt(g.paceNeeded)}</b></div>
+        <div class="progress" style="margin-top:10px; position:relative">
+          <i style={`width:${pct * 100}%`} />
+          <em style={`left:${pctNow * 100}%`} title="Where the month should be by now" />
         </div>
-      )}
-      {none && <div class="note" style="margin-top:8px">No reading for today yet. Open <a href={s.analyticsUrl} target="_blank">your analytics</a> or the feed once.</div>}
-      <div class="row" style="margin-top:10px"><span>Pace needed</span><b>{fmt(t.pace)}/day</b></div>
-      <div class="row"><span>From today's posts</span><span>{fmt(t.fromTodayPosts)}</span></div>
-      <div class="row"><span>From tails</span><span>{fmt(t.fromTails)}</span></div>
-      <div class="row"><span>Post by (normal day)</span><span>{t.postByLocal ?? '–'}</span></div>
+        <div class="dim" style="font-size:11px">Bar: month with today's end of day. Mark: where the month should be by now.</div>
+      </>) : (<>
+        <label>Monthly target (impressions)</label>
+        <input type="number" value={target} onInput={e => setTarget(Number((e.target as HTMLInputElement).value))} />
+        <div style="display:flex; gap:8px; margin-top:8px">
+          <button class="primary" onClick={save}>Save</button>
+          {g.target > 0 && <button class="ghost" onClick={() => setEditing(false)}>Cancel</button>}
+        </div>
+      </>)}
+
       <h2>Last 28 days</h2>
       <Bars daily={s.daily} />
     </section>
@@ -85,90 +117,84 @@ function Bars({ daily }: { daily: Daily[] }) {
   );
 }
 
-function Live({ s }: { s: State }) {
+const STATUS: Record<PostForecastView['status'], [string, string]> = {
+  starting: ['starting', 'Less than 90 minutes old, or one reading so far.'],
+  rising: ['rising', 'Still gaining at half or more of its first-hour rate.'],
+  slowing: ['slowing', 'Gaining at 20 to 50% of its first-hour rate.'],
+  tail: ['tail', 'Below 20% of its first-hour rate. Distribution has moved on.'],
+};
+
+function Posts({ s }: { s: State }) {
   if (!s.live.length) return <section class="dim">No posts younger than 48h with a reading.</section>;
   return (
     <section>
-      {s.live.map(p => (
-        <div class="row" style="display:block">
-          <div>
-            <a href={`https://www.linkedin.com/feed/update/urn:li:activity:${p.urn}/`} target="_blank">{fmtLocalTime(p.publishedAt, s.timezone)} · {p.type}</a>
-            <span class="dim"> · {p.hours.toFixed(1)}h</span>
-            {p.tailMode && <span class="tag warn">tail mode</span>}
+      {s.live.map(p => {
+        const [label, tip] = STATUS[p.status];
+        const title = p.textPreview ? p.textPreview.replace(/\s+/g, ' ').slice(0, 72) + (p.textPreview.length > 72 ? '…' : '') : `Post from ${fmtLocalTime(p.publishedAt, s.timezone)}`;
+        return (
+          <div class="post">
+            <a class="post-title" href={`https://www.linkedin.com/feed/update/urn:li:activity:${p.urn}/`} target="_blank">{title}</a>
+            <div class="dim" style="font-size:12px">{fmtLocalTime(p.publishedAt, s.timezone)} · {p.type === 'unknown' ? 'post' : p.type} · {p.hours < 48 ? p.hours.toFixed(1) + 'h' : Math.round(p.hours / 24) + 'd'}<span class={'tag ' + (p.status === 'tail' ? 'warn' : p.status === 'rising' ? 'good' : '')} title={tip}>{label}</span></div>
+            <div class="post-row">
+              <Spark p={p} />
+              <div>
+                <div><b>{fmt(p.impressions)}</b> now</div>
+                <div><b>{fmt(p.point)}</b> by end of day</div>
+                <div class="dim" style="font-size:12px">{p.gainPerHour !== undefined ? `${fmt(p.gainPerHour)}/h` : ''}</div>
+              </div>
+            </div>
           </div>
-          <div><b>{fmt(p.impressions)}</b> now · <b>{fmt(p.point)}</b> by end of day <span class="dim">({fmt(p.low)} to {fmt(p.high)})</span>{p.gainPerHour !== undefined && <span> · {fmt(p.gainPerHour)}/h</span>}</div>
-        </div>
-      ))}
+        );
+      })}
     </section>
   );
 }
 
-function Goal({ s, reload }: { s: State; reload: () => void }) {
-  const [kind, setKind] = useState<'daily' | 'monthly' | null>(s.settings.goal.kind);
-  const [value, setValue] = useState(s.settings.goal.value || s.goalSuggestion);
-  const save = async () => {
-    await rpc({ type: 'ui:setSettings', payload: { ...s.settings, goal: { kind, value: Number(value) } } });
-    reload();
-  };
-  const month = s.today.utcDate.slice(0, 7);
-  const recorded = s.daily.filter(d => d.utcDate.startsWith(month) && d.final).reduce((a, d) => a + d.impressions, 0);
+/** Impressions over hours since publish, solid to now, dashed to end of day. */
+function Spark({ p }: { p: PostForecastView }) {
+  const W = 200, H = 54, pad = 4;
+  const pts = p.series.length ? p.series : [[p.hours, p.impressions] as [number, number]];
+  const hEnd = Math.max(p.hours + 0.5, pts[pts.length - 1][0]);
+  const hToMid = Math.max(0.2, 24 - (new Date().getUTCHours() + new Date().getUTCMinutes() / 60));
+  const hMax = hEnd + hToMid;
+  const vMax = Math.max(p.point, ...pts.map(x => x[1]), 1);
+  const x = (h: number) => pad + (W - 2 * pad) * (h / hMax);
+  const y = (v: number) => H - pad - (H - 2 * pad) * (v / vMax);
+  const solid = [[0, 0] as [number, number], ...pts].map(([h, v]) => `${x(h).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+  const last = pts[pts.length - 1];
   return (
-    <section>
-      <label>Goal type</label>
-      <select value={kind ?? ''} onChange={e => setKind(((e.target as HTMLSelectElement).value || null) as 'daily' | 'monthly' | null)}>
-        <option value="">None (pace from the last 3 days)</option>
-        <option value="daily">Daily</option>
-        <option value="monthly">Monthly</option>
-      </select>
-      <label>Target</label>
-      <input type="number" value={value} onInput={e => setValue(Number((e.target as HTMLInputElement).value))} />
-      <div class="dim" style="margin:6px 0 10px">Suggestion from your last 7 days: {fmt(s.goalSuggestion)} per month.</div>
-      <button class="primary" onClick={save}>Save goal</button>
-      <h2>Pace</h2>
-      <div class="row"><span>Needed today</span><b>{fmt(s.today.pace)}</b></div>
-      {kind === 'monthly' && <div class="row"><span>Recorded this month</span><span>{fmt(recorded)}</span></div>}
-      <div class="row"><span>Tomorrow (day-ahead)</span><span>{s.model.recentDaily.length >= 3 ? fmt(dayAheadFrom(s)) : '–'}</span></div>
-    </section>
+    <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} class="spark-svg" aria-hidden="true">
+      <polyline points={solid} fill="none" stroke="#171717" stroke-width="2" stroke-linejoin="round" />
+      <line x1={x(last[0])} y1={y(last[1])} x2={x(hMax)} y2={y(p.point)} stroke="#171717" stroke-width="1.5" stroke-dasharray="3 3" />
+      <circle cx={x(last[0])} cy={y(last[1])} r="3" fill="#171717" />
+      <circle cx={x(hMax)} cy={y(p.point)} r="3" fill="#fff" stroke="#171717" stroke-width="1.5" />
+    </svg>
   );
-}
-
-function dayAheadFrom(s: State): number {
-  const rd = s.model.recentDaily.slice(-7);
-  const base = rd.reduce((a, b) => a + b, 0) / rd.length;
-  const dow = [1.05, 1.10, 1.10, 1.05, 0.90, 0.70, 0.75];
-  const tomorrow = new Date(new Date(s.today.utcDate + 'T00:00:00Z').getTime() + 86400000);
-  const wd = (tomorrow.getUTCDay() + 6) % 7;
-  return base * dow[wd] / (dow.reduce((a, b) => a + b, 0) / 7);
 }
 
 function Accuracy({ s }: { s: State }) {
   const a = s.accuracy;
-  const row = (k: string, v: { n: number; mape: number; coverage?: number }) => (
-    <tr><td>{k}</td><td class="n">{v.n}</td><td class="n">{v.n ? pct(v.mape) : '–'}</td><td class="n">{v.coverage !== undefined && v.n ? pct(v.coverage) : ''}</td></tr>
-  );
+  const eod = a.byHorizon['eod'], post = a.byHorizon['24h'];
   const errs = a.eodErrors;
   const maxE = Math.max(0.05, ...errs.map(e => Math.abs(e.errorPct)));
+  const line = (label: string, v: { n: number; mape: number; coverage: number } | undefined, unit: string) => (
+    <div class="row" style="display:block">
+      <div><b>{label}</b></div>
+      {v && v.n ? <div class="dim">Typically within <b>{pct(v.mape)}</b> over the last {v.n} {unit}. The 80% range held {pct(v.coverage)} of the time.</div> : <div class="dim">Nothing to score yet.</div>}
+    </div>
+  );
   return (
     <section>
-      <div class="note">Rolling 14 days. Interval target is 80% coverage. Regime <b>{s.model.regime}</b>: {REGIME_TIP[s.model.regime]}</div>
-      <h2>By horizon</h2>
-      <table><thead><tr><th>Horizon</th><th class="n">n</th><th class="n">MAPE</th><th class="n">Coverage</th></tr></thead>
-        <tbody>{Object.entries(a.byHorizon).map(([k, v]) => row(k, v))}</tbody></table>
-      <h2>By share observed</h2>
-      <table><thead><tr><th>Share</th><th class="n">n</th><th class="n">MAPE</th><th></th></tr></thead>
-        <tbody>{Object.entries(a.byShare).map(([k, v]) => row(k, v))}</tbody></table>
-      {Object.keys(a.byType).length > 0 && (<>
-        <h2>By post type</h2>
-        <table><thead><tr><th>Type</th><th class="n">n</th><th class="n">MAPE</th><th></th></tr></thead>
-          <tbody>{Object.entries(a.byType).map(([k, v]) => row(k, v))}</tbody></table>
-      </>)}
-      <h2>Daily EOD error</h2>
-      {errs.length ? (
-        <div class="spark" title={errs.map(e => `${e.utcDate}: ${pct(e.errorPct)}`).join('\n')}>
+      <div class="note">Every forecast is kept and scored against the actual once it lands. Rolling 14 days. Confidence: <b>{s.model.regime}</b>, {REGIME_TIP[s.model.regime].toLowerCase()}</div>
+      {line('End of day', eod, 'days')}
+      {line('Posts at 24h', post, 'posts')}
+      <h2>End of day, forecast versus actual</h2>
+      {errs.length ? (<>
+        <div class="spark" title={errs.map(e => `${e.utcDate}: ${e.errorPct > 0 ? 'too high' : 'too low'} by ${pct(Math.abs(e.errorPct))}`).join('\n')}>
           {errs.map(e => <i class={e.errorPct < 0 ? 'neg' : ''} style={`height:${Math.max(8, Math.abs(e.errorPct) / maxE * 100)}%`} />)}
         </div>
-      ) : <div class="dim">No closed day with a forecast yet.</div>}
-      <div class="dim" style="margin-top:8px">Interval scale: post {a.sdScale.post.toFixed(2)}, day {a.sdScale.day.toFixed(2)}</div>
+        <div class="dim" style="font-size:11px">One bar per day, mid-afternoon forecast. Grey: forecast too high. Red: too low.</div>
+      </>) : <div class="dim">No closed day with a forecast yet.</div>}
     </section>
   );
 }
@@ -184,10 +210,9 @@ function Health({ s, reload }: { s: State; reload: () => void }) {
         const ok = h?.lastOkAt && (!h.lastErrorAt || h.lastOkAt > h.lastErrorAt);
         return (
           <div class="row">
-            <span>{p}</span>
+            <span>{p.replace('_', ' ')}</span>
             <span>
-              {!h ? <span class="dim">never read</span> : ok ? <span class="tag">ok · {ago(h.lastOkAt!, s.now)}</span> : <span class="tag bad" title={h.lastError}>failing · {h.lastError ?? '?'}</span>}
-              {h?.path && <span class="dim"> {h.path}</span>}
+              {!h ? <span class="dim">never read</span> : ok ? <span class="tag good">ok · {ago(h.lastOkAt!, s.now)}</span> : <span class="tag bad" title={h.lastError}>failing · {h.lastError ?? '?'}</span>}
             </span>
           </div>
         );

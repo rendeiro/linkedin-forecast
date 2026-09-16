@@ -40,8 +40,10 @@ Then click the reload icon on the extension card in `chrome://extensions`.
 
 | | |
 |---|---|
-| ![Post line](docs/screenshots/post-line.png) | ![Popup Live tab](docs/screenshots/popup-live.png) |
-| Under each of your posts: `1,017 now · 2,207 by end of day`. Hover for the interval and hourly gain. | Popup: today, live posts, goal pace, accuracy, capture health. |
+| ![Post line](docs/screenshots/post-line.png) | ![Popup Posts tab](docs/screenshots/popup-live.png) |
+| Under each of your posts: `1,017 now · 2,207 by end of day`. Hover for the interval and hourly gain. | Popup, Posts: each live post with its curve so far, rising or tail, and its end-of-day count. |
+| ![Popup Today tab](docs/screenshots/popup-today.png) | |
+| Popup, Today: the day's number and one call: post again today or not, against the pace a monthly target needs. | |
 
 On the analytics page the chart above replaces LinkedIn's: solid line to today's count so far, dashed to the end-of-day number, in Daily or Cumulative view. A "LinkedIn chart" link swaps the original back.
 

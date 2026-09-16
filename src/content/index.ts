@@ -23,6 +23,7 @@ async function run() {
         const parent = block.parentElement;
         if (!parent) return;
         const daily = isDailySelected(document);
+        if (sessionStorage.getItem('lif:showLinkedInChart') !== '1') (block as HTMLElement).style.display = 'none';
         const host = document.querySelector('[data-lif="day"]');
         const key = `${daily}:${host?.isConnected ? 'on' : 'off'}`;
         const stale = !host || !host.isConnected || host.parentElement !== parent;

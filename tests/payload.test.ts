@@ -109,7 +109,19 @@ describe('placement on the saved post page', () => {
     const d = new DOMParser().parseFromString(html, 'text/html');
     const link = d.querySelector('a')!;
     const p = placementFor(link)!;
-    expect(p.parent).toBe(d.querySelector('[role="listitem"]')!.parentElement);
+    expect(p.parent).toBe(d.querySelector("[role=\"listitem\"]")!.parentElement);
     expect(p.before?.textContent).toBe('comments');
+  });
+});
+
+describe('placement guards', () => {
+  it('returns null inside a carousel that holds several posts, and when the bar is not hydrated', async () => {
+    const { placementFor } = await import('../src/content/readers/common');
+    const html = `<section role="list"><ul>
+      <li><div><a id="a" href="/analytics/post-summary/urn:li:activity:7505901697601384440/">1 impressions</a></div></li>
+      <li><div><button>Like</button><button>Comment</button><a href="/analytics/post-summary/urn:li:activity:7505901697601384441/">2 impressions</a></div></li>
+    </ul></section>`;
+    const d = new DOMParser().parseFromString(html, 'text/html');
+    expect(placementFor(d.querySelector('#a')!)).toBeNull();
   });
 });

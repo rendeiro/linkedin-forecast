@@ -36,12 +36,34 @@ export function waitFor<T>(fn: () => T | null | undefined, timeoutMs: number, in
 export function placementFor(link: Element): { parent: Element; before: Element | null } | null {
   let el: Element | null = link.parentElement;
   for (let i = 0; i < 8 && el && el !== document.body; i++) {
+    // Stop before any container that holds other posts (carousels, lists).
+    if (el.querySelectorAll(SEL.ownPostAnalyticsLink).length > 1 || el.matches('ul, ol, [role="list"], main, section')) return null;
     const bar = Array.from(el.querySelectorAll('button')).filter(b => /^(like|react|comment|repost|send)\b/i.test((b.getAttribute('aria-label') || b.textContent || '').trim())).length;
     if (bar >= 2 && el.parentElement) return { parent: el.parentElement, before: el.nextElementSibling };
     el = el.parentElement;
   }
-  const row = link.closest('[role="listitem"], li, div');
-  return row && row.parentElement ? { parent: row.parentElement, before: row.nextElementSibling } : null;
+  return null; // bar not hydrated yet: the caller retries on the next scan
+}
+
+/**
+ * Cards that link to one of the user's posts without an analytics row (profile Featured):
+ * one line at the end of the card, only when the card is about exactly one post.
+ */
+export function urnCardsWithoutAnalytics(doc: Document): { urn: string; card: Element }[] {
+  const out: { urn: string; card: Element }[] = [];
+  const seen = new Set<string>();
+  for (const a of Array.from(doc.querySelectorAll('a[href*="activity-"], a[href*="urn:li:activity:"]'))) {
+    const m = (a.getAttribute('href') || '').match(/activity[-:](\d{15,20})/);
+    if (!m) continue;
+    const card = a.closest('[role="listitem"], li, article');
+    if (!card || card.querySelector(SEL.ownPostAnalyticsLink)) continue;
+    const urns = new Set(Array.from(card.querySelectorAll('a')).map(x => (x.getAttribute('href') || '').match(/activity[-:](\d{15,20})/)?.[1]).filter(Boolean));
+    if (urns.size !== 1 || seen.has(m[1])) continue;
+    if (card.getBoundingClientRect().width < 200) continue;
+    seen.add(m[1]);
+    out.push({ urn: m[1], card });
+  }
+  return out;
 }
 
 /** Find the card element enclosing an own-post analytics link. */

@@ -37,14 +37,14 @@ function render(host: HTMLElement, html: string, cls = '', title = '') {
 const sep = '<span class="sep">·</span>';
 
 /** Render the one-liner under an own post. Pass `view` when the snapshot reply already carries it. */
-export async function mountPostOverlay(card: Element, urn: string, view?: PostForecastView | null, place?: { parent: Element; before: Element | null } | null) {
-  const host = place ? ensureHost(place.parent, 'post-' + urn, place.before) : ensureHost(card, 'post-' + urn);
+export async function mountPostOverlay(card: Element, urn: string, view?: PostForecastView | null, place?: { parent: Element; before: Element | null } | null, quiet = false) {
   let v = view;
   if (v === undefined) {
     const resp = (await send({ type: 'forecast:post', payload: { urn } })) as { view?: PostForecastView | null; enabled?: boolean } | undefined;
-    if (!resp || resp.enabled === false) { host.remove(); return; }
+    if (!resp || resp.enabled === false || (quiet && !resp.view)) { document.querySelector(`[data-lif="post-${urn}"]`)?.remove(); return; }
     v = resp.view;
   }
+  const host = place ? ensureHost(place.parent, 'post-' + urn, place.before) : ensureHost(card, 'post-' + urn);
   if (!v) { render(host, 'Forecast pending'); return; }
   const tip = [v.gainPerHour !== undefined ? `${fmt(v.gainPerHour)} per hour` : '', v.tailMode ? 'tail mode' : '', `80% interval ${fmt(v.low)} to ${fmt(v.high)}`, v.regime].filter(Boolean).join(' · ');
   render(host, `<b>${fmt(v.impressions)}</b> now${sep}<b>${fmt(v.point)}</b> by end of day`, '', tip);

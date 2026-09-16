@@ -1,5 +1,5 @@
 import { SEL } from '../selectors';
-import { send, health, cardOf, readImpressionsFromCard, detectPostType, readAgeHint, textPreview, readTotal7, placementFor } from './common';
+import { send, health, cardOf, readImpressionsFromCard, detectPostType, readAgeHint, textPreview, readTotal7, placementFor, urnCardsWithoutAnalytics } from './common';
 import { urnFromHref } from '../../model/urn';
 import type { PageType, PostForecastView } from '../../shared/types';
 import { mountPostOverlay } from '../overlay';
@@ -21,8 +21,9 @@ export function scanOwnPosts(doc: Document, page: PageType): number {
     const impressions = readImpressionsFromCard(card, link);
     const minuteKey = new Date().toISOString().slice(0, 16);
     if (impressions === null) continue;
-    mounted.set(urn, { card, link });
     const place = placementFor(link);
+    if (!place) continue; // reaction bar not hydrated yet; next scan retries
+    mounted.set(urn, { card, link });
     if (seenMinute.get(urn) !== minuteKey) {
       seenMinute.set(urn, minuteKey);
       n++;
@@ -42,9 +43,13 @@ export function scanOwnPosts(doc: Document, page: PageType): number {
       void mountPostOverlay(card, urn, undefined, place);
     }
   }
+  // Profile "Featured" and similar cards: known posts without an analytics row.
+  for (const { urn, card } of urnCardsWithoutAnalytics(doc)) {
+    void mountPostOverlay(card, urn, undefined, { parent: card, before: null }, true);
+  }
   if (refreshTimer === undefined) {
     refreshTimer = setInterval(() => {
-      for (const [u, m] of mounted) { if (m.card.isConnected) void mountPostOverlay(m.card, u, undefined, placementFor(m.link)); else mounted.delete(u); }
+      for (const [u, m] of mounted) { const pl = m.card.isConnected ? placementFor(m.link) : null; if (pl) void mountPostOverlay(m.card, u, undefined, pl); else mounted.delete(u); }
     }, 60_000) as unknown as number;
   }
   return n;

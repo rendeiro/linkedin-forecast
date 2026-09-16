@@ -138,7 +138,9 @@ function chartSvg(history: DayHistory[], eod: number, W: number): string {
     parts.push(`<line x1="${x(ti - 1)}" y1="${y(p.impressions)}" x2="${x(ti)}" y2="${y(target)}" stroke="${line}" stroke-width="${sw}" stroke-dasharray="6 6" stroke-linecap="round"/>`);
     parts.push(`<circle cx="${x(ti)}" cy="${y(target)}" r="5" fill="#fff" stroke="${line}" stroke-width="2.5"/>`);
     const label = eod > 0 ? `${fmt(eod)} by end of day` : `${fmt(t.impressions)} so far`;
-    parts.push(`<text x="${x(ti) - 12}" y="${Math.min(y(target), y(p.impressions)) - 22}" text-anchor="end" class="strong">${label}</text>`);
+    // Label on the side away from the incoming line: below when the line descends, above when it rises.
+    const descending = p.impressions > target;
+    parts.push(`<text x="${x(ti) + 6}" y="${descending ? y(target) + 28 : y(target) - 16}" text-anchor="end" class="strong">${label}</text>`);
   }
   return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${parts.join('')}</svg>`;
 }

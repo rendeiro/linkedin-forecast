@@ -72,6 +72,9 @@ export async function readFeed(doc: Document, page: PageType): Promise<boolean> 
     clearTimeout(scrollTimer);
     scrollTimer = setTimeout(() => scanOwnPosts(doc, page), 600) as unknown as number;
   }, { passive: true });
+  // Hydration and SPA navigation land late: rescan every 5 s for two minutes.
+  let ticks = 0;
+  const t = setInterval(() => { n += scanOwnPosts(doc, page); if (++ticks >= 24) clearInterval(t); }, 5000);
   setTimeout(() => {
     const ok = n > 0 || total7 !== null;
     void health(page, ok, ok ? undefined : 'no own posts or 7-day total seen');

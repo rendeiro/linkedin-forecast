@@ -31,7 +31,10 @@ export function waitFor<T>(fn: () => T | null | undefined, timeoutMs: number, in
 
 /** Find the card element enclosing an own-post analytics link. */
 export function cardOf(link: Element): Element {
-  // Climb to the whole post: the ancestor that also holds the reaction bar (Like / Comment controls).
+  // Current build: every post is a [role="article"] with data-urn.
+  const article = link.closest('[role="article"], article, [data-urn]');
+  if (article && article.querySelectorAll(SEL.ownPostAnalyticsLink).length === 1) return article;
+  // Fallback: climb to the ancestor that also holds the reaction bar (Like / Comment controls).
   let el: Element | null = link.parentElement;
   let fallback: Element | null = null;
   for (let i = 0; i < 20 && el && el !== document.body; i++) {
@@ -69,11 +72,19 @@ export function detectPostType(card: Element): PostType {
   return 'unknown';
 }
 
+/**
+ * Relative age from the header: "2h • Edited •", "5h •", "2d". The label is often a bare text
+ * node inside a span with siblings, so scan short spans rather than leaves, header first.
+ */
 export function readAgeHint(card: Element): number | null {
-  const els = Array.from(card.querySelectorAll(SEL.timeLabel));
-  for (const e of els) {
-    const t = (e.getAttribute('aria-label') || e.textContent || '').trim();
-    const m = t.match(RE.ageLabel);
+  const link = card.querySelector(SEL.ownPostAnalyticsLink);
+  const spans = Array.from(card.querySelectorAll('span, time, p'));
+  for (const e of spans) {
+    // Only elements before the analytics row (the post header), never comment timestamps.
+    if (link && !(e.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING)) continue;
+    const t = (e.getAttribute('aria-label') || e.textContent || '').replace(/\s+/g, ' ').trim();
+    if (!t || t.length > 40) continue;
+    const m = t.match(/(?:^|\s)(\d+)\s*(mo|m|h|d|w)\b/i);
     if (m) {
       const h = ageLabelToHours(m[1] + m[2]);
       if (h !== null) return h;

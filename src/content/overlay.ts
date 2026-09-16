@@ -64,14 +64,30 @@ export async function mountDayOverlay(parent: Element, before: Element | null, o
   const v = resp.view;
   if (!v || v.dailyNowSource === 'none') { render(host, 'Daily impressions: no reading for today yet', 'card'); return; }
   const tip = `pace needs ${fmt(v.pace)} per day · 80% interval ${fmt(v.low)} to ${fmt(v.high)} · ${v.regime}`;
-  const head = v.early
-    ? `Daily impressions${sep}<b>${fmt(v.dailyNow)}</b> now${sep}end of day estimate from 06:00 UTC`
-    : `Daily impressions${sep}<b>${fmt(v.dailyNow)}</b> now${sep}<b>${fmt(v.point)}</b> by end of day`;
-  if (!opts.daily || !resp.history || resp.history.length < 2) { render(host, head, 'card', tip); return; }
+  // Match LinkedIn's 7-day window: six completed days plus today.
+  const hist = (resp.history ?? []).slice(-7);
+  const eodDaily = v.early || !Number.isFinite(v.point) ? 0 : v.point;
+  let head: string;
+  let points: DayHistory[] = hist;
+  let eod = eodDaily;
+  if (opts.daily) {
+    head = v.early
+      ? `Daily impressions${sep}<b>${fmt(v.dailyNow)}</b> now${sep}end of day estimate from 06:00 UTC`
+      : `Daily impressions${sep}<b>${fmt(v.dailyNow)}</b> now${sep}<b>${fmt(v.point)}</b> by end of day`;
+  } else {
+    let run = 0;
+    points = hist.map(h => ({ ...h, impressions: (run += h.impressions) }));
+    const past = run - v.dailyNow;
+    eod = eodDaily ? past + eodDaily : 0;
+    head = v.early
+      ? `7-day total${sep}<b>${fmt(run)}</b> now${sep}end of day estimate from 06:00 UTC`
+      : `7-day total${sep}<b>${fmt(run)}</b> now${sep}<b>${fmt(eod)}</b> by end of day`;
+  }
+  if (points.length < 2) { render(host, head, 'card', tip); return; }
 
   const hidden = localStorage.getItem('lif:showLinkedInChart') !== '1';
   const toggle = `<span class="toggle" data-toggle>${hidden ? 'LinkedIn chart' : 'Forecast chart'}</span>`;
-  render(host, head + toggle + (hidden ? chartSvg(resp.history, v) : ''), 'card', tip);
+  render(host, head + toggle + (hidden ? chartSvg(points, eod) : ''), 'card', tip);
   if (opts.chartBlock) (opts.chartBlock as HTMLElement).style.display = hidden ? 'none' : '';
   host.shadowRoot!.querySelector('[data-toggle]')?.addEventListener('click', () => {
     localStorage.setItem('lif:showLinkedInChart', hidden ? '1' : '0');
@@ -79,12 +95,11 @@ export async function mountDayOverlay(parent: Element, before: Element | null, o
   });
 }
 
-function chartSvg(history: DayHistory[], v: DayForecastView): string {
+function chartSvg(history: DayHistory[], eod: number): string {
   // Mirrors LinkedIn's line chart: light horizontal grid, axis labels, one teal line.
   // Solid through completed days to today's current value; dashed from yesterday to the EOD point.
   const W = 800, H = 260, top = 16, bottom = 36, left = 56, right = 24;
   const line = '#2d6a72';
-  const eod = v.early || !Number.isFinite(v.point) ? 0 : v.point;
   const rawMax = Math.max(1, ...history.map(h => h.impressions), eod);
   const step = niceStep(rawMax / 4);
   const max = Math.ceil(rawMax / step) * step;

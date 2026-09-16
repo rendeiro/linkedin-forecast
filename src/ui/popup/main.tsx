@@ -90,7 +90,7 @@ function Today({ s, reload }: { s: State; reload: () => void }) {
         <div class="row"><span>Needed per day, {g.daysLeft} days left</span><b>{fmt(g.paceNeeded)}</b></div>
         <div class="progress" style="margin-top:10px; position:relative">
           <i style={`width:${pct * 100}%`} />
-          <em style={`left:${pctNow * 100}%`} title="Where the month should be by now" />
+          <em class={pct >= pctNow ? 'crossed' : ''} style={`left:${pctNow * 100}%`} title="Where the month should be by now" />
         </div>
         <div class="dim" style="font-size:11px">Bar: month with today's end of day. Mark: where the month should be by now.</div>
       </>) : (<>

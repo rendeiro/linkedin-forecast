@@ -1,42 +1,14 @@
 # LinkedIn Impressions Forecast
 
-A Chrome extension that tells you, while you browse LinkedIn, where today is heading: how many impressions your day will close at, and how many each of your posts will have by the end of the day. It reads the numbers LinkedIn already shows you. Nothing leaves your browser.
-
 <p align="center"><img src="docs/screenshots/analytics-daily.png" width="720" alt="Analytics card with the forecast line: solid to now, dashed to end of day"></p>
 
-## What you get
+A Chrome extension that shows, on LinkedIn itself, where today is heading: your daily impressions by end of day, and each post's count by end of day. Local only. Nothing leaves your browser.
 
-**One line under each of your posts**
+## Install
 
-```
-845 now · 1,930 by end of day
-```
+Needs Chrome and Node 18 or newer. Five minutes.
 
-Current impressions, and the count expected at the end of the current UTC day. Hover for the 80% interval, the hourly gain, and the model's confidence level.
-
-**A forecast chart on the analytics page**
-
-The Content analytics card gets a line chart in LinkedIn's style: solid line through the last six days to today's count so far, dashed line to the end-of-day number. Works in Daily and Cumulative view. A small "LinkedIn chart" link swaps LinkedIn's original back in.
-
-**A popup**
-
-- Today: daily impressions so far, end-of-day forecast, pace needed for your goal, last 28 days
-- Live: every post younger than 48 hours with its forecast
-- Goal: daily or monthly target, pace per day
-- Accuracy: how wrong the forecasts have been, by horizon and by post type
-- Health: which LinkedIn page types were last read successfully
-
-**Nudges** (Chrome notifications, at most 4 a day, none in quiet hours)
-
-1. One hour after you post: slow, average, or strong start compared with your own history
-2. Two hours after: updated end-of-day number when it moved
-3. Mid-afternoon on weekdays: whether a second post today is worth it, and what it would add
-4. 08:00: yesterday's number and the latest time to post for a normal day
-5. 09:00: scorecard, forecast versus actual for yesterday
-
-## Install (unpacked extension)
-
-You need Node 18 or newer and Chrome.
+**1. Build**
 
 ```bash
 git clone https://github.com/rendeiro/linkedin-forecast.git
@@ -45,17 +17,35 @@ npm install
 npm run build
 ```
 
-Then in Chrome:
+**2. Load into Chrome**
 
 1. Open `chrome://extensions`
-2. Turn on **Developer mode** (switch in the top right)
+2. Turn on **Developer mode** (top right)
 3. Click **Load unpacked**
-4. Pick the `dist/` folder inside the cloned repo
-5. Pin the extension icon, click it, press **Open analytics**
+4. Select the `dist/` folder inside `linkedin-forecast`
 
-Setup takes under three minutes: the analytics page gives the daily series, your recent posts get one reading each, and you answer one question about your goal.
+**3. First run**
 
-To update later: `git pull`, `npm run build`, then click the reload icon on the extension card in `chrome://extensions`.
+Click the extension icon, press **Open analytics**, wait ten seconds. The popup shows "7 days captured". Press **Finish setup**. Open one of your posts and the line appears under it.
+
+**Update**
+
+```bash
+git pull && npm run build
+```
+
+Then click the reload icon on the extension card in `chrome://extensions`.
+
+## What it shows
+
+| | |
+|---|---|
+| ![Post line](docs/screenshots/post-line.png) | ![Popup Live tab](docs/screenshots/popup-live.png) |
+| Under each of your posts: `1,017 now · 2,207 by end of day`. Hover for the interval and hourly gain. | Popup: today, live posts, goal pace, accuracy, capture health. |
+
+On the analytics page the chart above replaces LinkedIn's: solid line to today's count so far, dashed to the end-of-day number, in Daily or Cumulative view. A "LinkedIn chart" link swaps the original back.
+
+Nudges arrive as Chrome notifications, at most 4 a day and none in quiet hours: one and two hours after you post, a mid-afternoon second-post call on weekdays, a morning plan at 08:00, a scorecard at 09:00.
 
 ## How the forecast works
 

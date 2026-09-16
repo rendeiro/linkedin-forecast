@@ -90,7 +90,7 @@ export async function goldenHourClose(urn: string, now = new Date()) {
   const crossed = prev.point && medTotal ? (prev.point < medTotal) !== (view.point < medTotal) : false;
   if (!moved && !crossed) return;
   const inNet = latest.inNetworkShare !== undefined ? `, ${Math.round(latest.inNetworkShare * 100)}% in-network: ${latest.inNetworkShare < 0.55 ? 'travelling' : 'mostly your network'}` : '';
-  await fire('golden2', urn, `${fmt(latest.impressions)} at 2h${inNet}. 24h forecast ${fmt(view.point)}.`, 'Open post', POST_URL(urn), now);
+  await fire('golden2', urn, `${fmt(latest.impressions)} at 2h${inNet}. ${fmt(view.point)} by end of day.`, 'Open post', POST_URL(urn), now);
 }
 
 // ---- #3 second post decision ----

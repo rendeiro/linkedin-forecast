@@ -113,3 +113,23 @@ describe('parseCount', () => {
     expect(parseCount('abc')).toBe(null);
   });
 });
+
+describe('post end-of-day forecast', () => {
+  it('never goes below the current count, for any hour and any prior', async () => {
+    const { postEod } = await import('../src/model/simple');
+    for (const h of [0.2, 1, 2.7, 6, 13, 22.8, 24.9, 40, 90]) {
+      for (const recent of [[], [50, 60, 70], [2000, 2500, 2200]]) {
+        for (const hToMid of [0.5, 7, 21.3]) {
+          const f = postEod(h, hToMid, 845, recent);
+          expect(f.low).toBeGreaterThanOrEqual(845);
+          expect(f.point).toBeGreaterThanOrEqual(f.low);
+          expect(f.high).toBeGreaterThanOrEqual(f.point);
+        }
+      }
+    }
+  });
+  it('gains more with more hours left before midnight', async () => {
+    const { postEod } = await import('../src/model/simple');
+    expect(postEod(2, 20, 845, [2000]).point).toBeGreaterThan(postEod(2, 5, 845, [2000]).point);
+  });
+});

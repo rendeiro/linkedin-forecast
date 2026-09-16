@@ -4,7 +4,7 @@
  */
 import type { ModelState, PostType, Regime, Table } from '../shared/types';
 
-export const MODEL_VERSION = 1;
+export const MODEL_VERSION = 2;
 
 export const S_POST_PRIOR: Table = {
   '0.5': 0.10, '1': 0.18, '2': 0.30, '3': 0.40, '4': 0.48, '5': 0.56, '6': 0.63, '8': 0.74,
@@ -148,6 +148,43 @@ export function postForecast(
   }
   const sd = (0.08 + 0.45 * (1 - Math.min(s, 1))) * (opts.sdScale ?? 1);
   return { point: total, low: total * Math.exp(-Z80 * sd), high: total * Math.exp(Z80 * sd), share: s, sd };
+}
+
+/**
+ * Share curve extended past 24h: posts keep earning for days, lifetime about 1.6x the 24h mark.
+ * S(h) = 1 + 0.6 * (1 - exp(-(h - 24) / 36)) for h > 24.
+ */
+export function shareAt(sPost: Table, h: number): number {
+  if (h <= 24) return Math.max(interp(sPost, h), MIN_SHARE);
+  return 1 + 0.6 * (1 - Math.exp(-(h - 24) / 36));
+}
+
+export interface PostEod { point: number; low: number; high: number; total24: number; share: number; gain: number; }
+
+/**
+ * A post's count at the end of the current UTC day: current impressions plus the expected gain
+ * between now (h hours after publish) and midnight (hToMidnight hours ahead). The account prior
+ * only scales the remaining gain, so point and both bounds are never below the current count.
+ */
+export function postEod(
+  h: number,
+  hToMidnight: number,
+  impressions: number,
+  recentTotals: number[],
+  opts: { sPost?: Table; typeFactor?: number; inNetworkShare?: number; sdScale?: number } = {},
+): PostEod {
+  const sPost = opts.sPost ?? S_POST_PRIOR;
+  const f = postForecast(h, impressions, recentTotals, opts);
+  const sNow = shareAt(sPost, h);
+  const sMid = shareAt(sPost, h + Math.max(hToMidnight, 0));
+  const gain = Math.max(0, (sMid - sNow) * f.point);
+  const sd = f.sd;
+  return {
+    point: impressions + gain,
+    low: impressions + gain * Math.exp(-Z80 * sd),
+    high: impressions + gain * Math.exp(Z80 * sd),
+    total24: f.point, share: f.share, gain,
+  };
 }
 
 /** Fallback for recentTotals when fewer than 3 actuals exist: lifetime totals / 1.6. */

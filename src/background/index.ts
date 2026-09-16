@@ -2,13 +2,13 @@
 import type { ContentMessage, Post, Settings } from '../shared/types';
 import {
   ingestSnapshot, ingestDaily, ingestTotal7, ingestPosts, ingestFollowers, computePostView, computeDayView, livePosts,
-  accuracyStats, onNewPost, initModelFromData, goalSuggestion, logDayForecasts, ensurePost, dayHistory,
+  accuracyStats, onNewPost, initModelFromData, goalSuggestion, logDayForecasts, ensurePost, dayHistory, rebuildModel,
 } from './engine';
 import { getSettings, setSettings, getModel, setModel, getOnboarding, setOnboarding, getHealth, timezone, getLocal, setLocal } from './state';
 import { allDaily, allPosts, allSnapshots, dumpAll, restoreAll, clearAll, putDaily, putPost, getPost, addSnapshot, putFollower, allNudges, type Dump } from './store';
 import { scheduleAlarms, runAnalyticsVisit, runPostVisits, forcedPostVisit, resolveVisit, recordHealth, avStatus, ANALYTICS_URL, postSummaryUrl } from './autovisit';
 import { goldenHourCheck, goldenHourClose, secondPostCheck, morningPlan, scorecard, onNotificationClick } from './nudges';
-import { initialModel, regimeOf } from '../model/simple';
+import { initialModel, regimeOf, MODEL_VERSION } from '../model/simple';
 import { nextLocalTime, utcDateOf, hoursBetween } from '../shared/time';
 import type { ExportResult } from '../model/export';
 
@@ -59,14 +59,24 @@ chrome.alarms.onAlarm.addListener(async alarm => {
   } catch (e) { console.warn('[lif] alarm failed', alarm.name, e); }
 });
 
+async function ensureModelVersion() {
+  const rebuilt = await getLocal<number>('modelRebuilt', 0);
+  if (rebuilt !== MODEL_VERSION) {
+    const r = await rebuildModel();
+    console.info('[lif] model rebuilt', r);
+    await setLocal('modelRebuilt', MODEL_VERSION);
+  }
+}
+
 chrome.runtime.onInstalled.addListener(async () => {
   await getSettings().then(setSettings);
   const m = await getLocal('model', null);
   if (!m) await setModel(initialModel());
+  await ensureModelVersion();
   await scheduleDailyAlarms();
   await scheduleAlarms();
 });
-chrome.runtime.onStartup.addListener(async () => { await scheduleDailyAlarms(); await scheduleAlarms(); });
+chrome.runtime.onStartup.addListener(async () => { await ensureModelVersion(); await scheduleDailyAlarms(); await scheduleAlarms(); });
 
 chrome.notifications.onButtonClicked.addListener(id => { void onNotificationClick(id); });
 chrome.notifications.onClicked.addListener(id => { void onNotificationClick(id); });
@@ -81,6 +91,7 @@ export type UiMessage =
   | { type: 'ui:importJson'; payload: Dump }
   | { type: 'ui:importExport'; payload: ExportResult }
   | { type: 'ui:reset' }
+  | { type: 'ui:rebuild' }
   | { type: 'ui:debug' };
 
 type AnyMessage = ContentMessage | UiMessage;
@@ -147,6 +158,7 @@ async function handle(msg: AnyMessage, sender: chrome.runtime.MessageSender): Pr
       await scheduleAlarms();
       return { ok: true };
     }
+    case 'ui:rebuild': { const r = await rebuildModel(); await setLocal('modelRebuilt', MODEL_VERSION); return { ok: true, ...r }; }
     case 'ui:debug': return { snapshots: (await allSnapshots()).slice(-200), daily: await allDaily(), posts: await allPosts(), nudges: await allNudges() };
   }
   return { error: 'unknown message' };

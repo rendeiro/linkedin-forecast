@@ -49,6 +49,10 @@ function App() {
     await rpc({ type: 'ui:reset' }); setMsg('Reset done.'); load();
   };
   const showDebug = async () => setDebug(await rpc({ type: 'ui:debug' }));
+  const rebuild = async () => {
+    const r = await rpc<{ posts: number; trusted: number; actuals: number }>({ type: 'ui:rebuild' });
+    setMsg(`Model rebuilt from ${r.posts} posts: ${r.trusted} with a trusted publish time, ${r.actuals} usable 24h actuals.`); load();
+  };
 
   return (
     <div>
@@ -99,7 +103,7 @@ function App() {
       </div>
 
       <h2>Debug</h2>
-      <div style="display:flex; gap:8px"><button class="ghost" onClick={showDebug}>Show captured data</button><button class="ghost" onClick={reset}>Reset everything</button></div>
+      <div style="display:flex; gap:8px"><button class="ghost" onClick={showDebug}>Show captured data</button><button class="ghost" onClick={rebuild}>Rebuild model from readings</button><button class="ghost" onClick={reset}>Reset everything</button></div>
       {debug && (<>
         <h2>Daily ({debug.daily.length})</h2>
         <table><thead><tr><th>UTC date</th><th class="n">Impressions</th><th>Final</th><th>Source</th></tr></thead>

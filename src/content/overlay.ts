@@ -47,8 +47,7 @@ export async function mountPostOverlay(card: Element, urn: string, view?: PostFo
   }
   if (!v) { render(host, 'Forecast pending'); return; }
   const tip = [v.gainPerHour !== undefined ? `${fmt(v.gainPerHour)} per hour` : '', v.tailMode ? 'tail mode' : '', `80% interval ${fmt(v.low)} to ${fmt(v.high)}`, v.regime].filter(Boolean).join(' · ');
-  if (v.hours >= 24) { render(host, `<b>${fmt(v.impressions)}</b> now${sep}24h passed`, '', tip); return; }
-  render(host, `<b>${fmt(v.impressions)}</b> now${sep}<b>${fmt(v.point)}</b> at 24h`, '', tip);
+  render(host, `<b>${fmt(v.impressions)}</b> now${sep}<b>${fmt(v.point)}</b> by end of day`, '', tip);
 }
 
 export interface DayHistory { utcDate: string; impressions: number; today: boolean }

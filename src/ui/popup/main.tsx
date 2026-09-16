@@ -95,7 +95,7 @@ function Live({ s }: { s: State }) {
             <span class="dim"> · {p.hours.toFixed(1)}h</span>
             {p.tailMode && <span class="tag warn">tail mode</span>}
           </div>
-          <div><b>{fmt(p.impressions)}</b> now · 24h ≈ <b>{fmt(p.point)}</b> <span class="dim">({fmt(p.low)} to {fmt(p.high)})</span>{p.gainPerHour !== undefined && <span> · {fmt(p.gainPerHour)}/h</span>}</div>
+          <div><b>{fmt(p.impressions)}</b> now · <b>{fmt(p.point)}</b> by end of day <span class="dim">({fmt(p.low)} to {fmt(p.high)})</span>{p.gainPerHour !== undefined && <span> · {fmt(p.gainPerHour)}/h</span>}</div>
         </div>
       ))}
     </section>

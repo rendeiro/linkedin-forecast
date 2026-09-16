@@ -6,6 +6,7 @@ export interface Post {
   urn: string;                 // 19-digit activity id
   publishedAt: string;         // ISO
   publishedApprox: boolean;
+  timeTrusted?: boolean;       // publish time confirmed by a page label or an early first reading
   type: PostType;
   textPreview?: string;
   firstSeenAt: string;
@@ -143,9 +144,10 @@ export interface PostForecastView {
   publishedAt: string;
   hours: number;
   impressions: number;
-  point: number;
+  point: number;               // count expected at the end of the current UTC day
   low: number;
   high: number;
+  total24?: number;            // internal scale estimate
   gainPerHour?: number;
   tailMode: boolean;
   regime: Regime;

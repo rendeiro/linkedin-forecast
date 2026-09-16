@@ -11,7 +11,7 @@ import {
 } from './store';
 import { getModel, getOnboarding, getSettings, setModel, setOnboarding, timezone } from './state';
 import {
-  dailyEod, dayAhead, evalTail, interp, learnDay, learnDow, learnPost, median, mean, postByHoursBeforeMidnight, postForecast,
+  dailyEod, dayAhead, evalTail, interp, learnDay, learnDow, learnPost, median, mean, postByHoursBeforeMidnight, postEod, initialModel,
   recentTotalsOrLifetime, regimeOf, shiftSDay, typeFactor, MODEL_VERSION, pace as paceOf,
 } from '../model/simple';
 import { resolvePublishedAt } from '../model/urn';
@@ -36,9 +36,11 @@ export async function ensurePost(seen: PostSeen, now = new Date()): Promise<{ po
       const hint = seen.ageHintHours;
       const unit = hint < 1 ? 1 / 60 : hint < 24 ? 1 : hint < 168 ? 24 : 168;
       const age = hoursBetween(existing.publishedAt, now);
+      if (!existing.timeTrusted && age >= hint - 0.2 && age <= hint + unit + 0.2) { existing.timeTrusted = true; changed = true; }
       if (age < hint - 0.2 || age > hint + unit + 0.2) {
         existing.publishedAt = new Date(now.getTime() - (hint + unit / 2) * HOUR).toISOString();
         existing.publishedApprox = true;
+        existing.timeTrusted = true;
         changed = true;
         if (existing.actual24h !== undefined && hoursBetween(existing.publishedAt, now) < 23.5) await undoActual(existing);
       }
@@ -49,6 +51,7 @@ export async function ensurePost(seen: PostSeen, now = new Date()): Promise<{ po
   const r = resolvePublishedAt(seen.urn, now, { ageHintHours: seen.ageHintHours, localHourOf: d => localHour(d, tz) });
   const post: Post = {
     urn: seen.urn, publishedAt: r.publishedAt.toISOString(), publishedApprox: r.approx,
+    timeTrusted: seen.ageHintHours !== undefined && seen.ageHintHours !== null,
     type: seen.type ?? 'unknown', textPreview: seen.textPreview, firstSeenAt: now.toISOString(),
   };
   await putPost(post);
@@ -83,6 +86,7 @@ export async function ingestSnapshot(snap: Snapshot & { post?: PostSeen }): Prom
     await putPost(post);
   }
   const ageH = hoursBetween(post.publishedAt, now);
+  if (!post.timeTrusted && snaps.length && hoursBetween(post.publishedAt, snaps[0].observedAt) <= 3) { post.timeTrusted = true; await putPost(post); }
   if (created && ageH < 3 && newPostHook) await newPostHook(post);
   await checkPostActual(post, snaps);
   return computePostView(post.urn, snaps);
@@ -104,6 +108,10 @@ async function undoActual(post: Post) {
 
 async function checkPostActual(post: Post, snaps: Snapshot[]) {
   if (post.actual24h) return;
+  // Learn only from posts with a trustworthy publish time and at least one reading before hour 20.
+  if (!post.timeTrusted) return;
+  const hs = snaps.map(s => hoursBetween(post.publishedAt, s.observedAt));
+  if (!hs.some(h => h > 0 && h < 20)) return;
   const withH = snaps.map(s => ({ s, h: hoursBetween(post.publishedAt, s.observedAt) })).filter(x => x.h >= 23.5);
   if (!withH.length) return;
   const first = withH.sort((a, b) => a.h - b.h)[0];
@@ -259,10 +267,11 @@ export async function computePostView(urn: string, snaps?: Snapshot[], now = new
   const latest = latestSnapshot(ss);
   if (!latest) return null;
   const model = await getModel();
-  const h = Math.max(hoursBetween(post.publishedAt, latest.observedAt), 0.05);
+  const h = Math.max(hoursBetween(post.publishedAt, now), 0.05);
+  const hToMidnight = 24 - utcHourOf(now);
   const recent = await recentTotalsFor(model);
   const tf = model.recentTotals.length >= 3 ? typeFactor(model, post.type) : 1;
-  const f = postForecast(h, latest.impressions, recent, { sPost: model.sPost, typeFactor: tf, inNetworkShare: latest.inNetworkShare, sdScale: model.sdScale.post });
+  const f = postEod(h, hToMidnight, latest.impressions, recent, { sPost: model.sPost, typeFactor: tf, inNetworkShare: latest.inNetworkShare, sdScale: model.sdScale.post });
   const points: [number, number][] = ss.map(s => [hoursBetween(post.publishedAt, s.observedAt), s.impressions]);
   let gainPerHour: number | undefined;
   const earlier = [...ss].reverse().find(s => hoursBetween(s.observedAt, latest.observedAt) >= 20 / 60);
@@ -271,12 +280,40 @@ export async function computePostView(urn: string, snaps?: Snapshot[], now = new
   const regime: Regime = regimeOf(model.nPostActuals);
   const view: PostForecastView = {
     urn, publishedAt: post.publishedAt, hours: h, impressions: latest.impressions,
-    point: post.actual24h ?? f.point, low: f.low, high: f.high, gainPerHour, tailMode: tail.tailMode, regime, type: post.type, observedAt: latest.observedAt,
+    point: f.point, low: f.low, high: f.high, total24: f.total24, gainPerHour, tailMode: tail.tailMode, regime, type: post.type, observedAt: latest.observedAt,
   };
   if (h < 24 && !post.actual24h && hoursBetween(latest.observedAt, now) < 6) {
-    await logForecast({ target: 'post', key: urn, horizon: '24h', point: f.point, low: f.low, high: f.high, shareObserved: f.share, regime, postType: post.type });
+    const sd = 0.08 + 0.45 * (1 - Math.min(f.share, 1));
+    await logForecast({ target: 'post', key: urn, horizon: '24h', point: f.total24, low: f.total24 * Math.exp(-1.28 * sd), high: f.total24 * Math.exp(1.28 * sd), shareObserved: f.share, regime, postType: post.type });
   }
   return view;
+}
+
+/**
+ * Discard the derived model and rebuild it from stored readings under the trust rules.
+ * Raw snapshots and daily values are kept. Runs once per model version and on demand.
+ */
+export async function rebuildModel(): Promise<{ posts: number; trusted: number; actuals: number }> {
+  await setModel(initialModel());
+  const posts = (await allPosts()).sort((a, b) => (a.publishedAt < b.publishedAt ? -1 : 1));
+  let trusted = 0, actuals = 0;
+  for (const p of posts) {
+    const ss = await snapshotsFor(p.urn);
+    if (p.timeTrusted === undefined) p.timeTrusted = ss.length > 0 && hoursBetween(p.publishedAt, ss[0].observedAt) <= 3;
+    delete p.actual24h; delete p.actual24hApprox;
+    await putPost(p);
+    for (const f of await forecastsFor(p.urn)) if (f.actual !== undefined) { delete f.actual; delete f.errorPct; delete f.inBand; await putForecast(f); }
+    if (p.timeTrusted) trusted++;
+  }
+  for (const p of posts) {
+    const fresh = (await getPost(p.urn))!;
+    await checkPostActual(fresh, await snapshotsFor(p.urn));
+    if ((await getPost(p.urn))!.actual24h) actuals++;
+  }
+  const model = await getModel();
+  const finals = (await allDaily()).filter(d => d.final).slice(-14).map(d => d.impressions);
+  await setModel({ ...model, recentDaily: finals });
+  return { posts: posts.length, trusted, actuals };
 }
 
 export interface DailyNow { value: number; source: 'analytics' | 'derived' | 'partial' | 'none'; }

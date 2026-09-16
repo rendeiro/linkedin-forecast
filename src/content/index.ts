@@ -1,10 +1,10 @@
 import { URL_PATTERNS, SEL } from './selectors';
-import { readAnalytics } from './readers/analytics';
+import { readAnalytics, readChartAria } from './readers/analytics';
 import { readPostSummary } from './readers/postSummary';
 import { readFeed } from './readers/feed';
 import { readNotifications } from './readers/notifications';
 import { mountDayOverlay } from './overlay';
-import { waitFor } from './readers/common';
+import { waitFor, send } from './readers/common';
 
 async function run() {
   // Demo pages (docs/demo) force a route with <html data-lif-route="analytics">.
@@ -25,17 +25,26 @@ async function run() {
         const parent = block.parentElement;
         if (!parent) return;
         const daily = isDailySelected(document);
-        const days = periodDays(document);
+        // The chart carries exactly the selected window, custom ranges included.
+        const points = readChartAria(document, !daily);
+        const days = points.length >= 2 ? points.length : periodDays(document);
         if (sessionStorage.getItem('lif:showLinkedInChart') !== '1') (block as HTMLElement).style.display = 'none';
         const host = document.querySelector('[data-lif="day"]');
-        const key = `${daily}:${days}:${host?.isConnected ? 'on' : 'off'}`;
+        const pointsKey = points.length ? `${points[0].utcDate}:${points.length}:${points[points.length - 1].impressions}` : '';
+        const key = `${daily}:${days}:${pointsKey}:${host?.isConnected ? 'on' : 'off'}`;
         const stale = !host || !host.isConnected || host.parentElement !== parent;
         if (stale || key !== lastKey || Date.now() - lastMount > 60_000) {
+          // A new window or a fresh render: store its daily values before drawing.
+          if (points.length >= 2 && pointsKey !== lastPoints) {
+            lastPoints = pointsKey;
+            await send({ type: 'daily', payload: { points, observedAt: new Date().toISOString() } });
+          }
           lastKey = key; lastMount = Date.now();
           await mountDayOverlay(parent, block, { daily, days, chartBlock: block });
         }
       };
       let lastMount = 0;
+      let lastPoints = '';
       await pass();
       setInterval(pass, 2000);
     } else if (URL_PATTERNS.postSummary.test(url)) {

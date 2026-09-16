@@ -22,8 +22,7 @@ export function scanOwnPosts(doc: Document, page: PageType): number {
     const minuteKey = new Date().toISOString().slice(0, 16);
     if (impressions === null) continue;
     const place = placementFor(link);
-    if (!place) continue; // reaction bar not hydrated yet; next scan retries
-    mounted.set(urn, { card, link });
+    if (place) mounted.set(urn, { card, link });
     if (seenMinute.get(urn) !== minuteKey) {
       seenMinute.set(urn, minuteKey);
       n++;
@@ -37,9 +36,10 @@ export function scanOwnPosts(doc: Document, page: PageType): number {
         },
       }).then(resp => {
         const r = resp as { view?: PostForecastView | null } | undefined;
-        void mountPostOverlay(card, urn, r?.view ?? undefined, place);
+        const pl = place ?? placementFor(link);
+        if (pl) void mountPostOverlay(card, urn, r?.view ?? undefined, pl);
       });
-    } else {
+    } else if (place && !document.querySelector(`[data-lif="post-${urn}"]`)) {
       void mountPostOverlay(card, urn, undefined, place);
     }
   }
@@ -59,17 +59,14 @@ export async function readFeed(doc: Document, page: PageType): Promise<boolean> 
   const total7 = readTotal7(doc);
   if (total7 !== null) void send({ type: 'total7', payload: { value: total7, observedAt: new Date().toISOString() } });
   let n = scanOwnPosts(doc, page);
-  const root = doc.querySelector(SEL.mainFeed) ?? doc.body;
-  const stop = Date.now() + 30_000;
+  // LinkedIn hydrates and paginates for as long as the page lives: observe the whole page,
+  // debounced, with no cutoff. Scans are cheap (one querySelectorAll on a stable attribute).
+  const root = doc.body;
   let pending = false;
   const obs = new MutationObserver(() => {
     if (pending) return;
     pending = true;
-    setTimeout(() => {
-      pending = false;
-      n += scanOwnPosts(doc, page);
-      if (Date.now() > stop) obs.disconnect();
-    }, 500);
+    setTimeout(() => { pending = false; n += scanOwnPosts(doc, page); }, 300);
   });
   obs.observe(root, { childList: true, subtree: true });
   // Also keep scanning on scroll while the page lives (the feed inserts cards lazily).
@@ -78,9 +75,9 @@ export async function readFeed(doc: Document, page: PageType): Promise<boolean> 
     clearTimeout(scrollTimer);
     scrollTimer = setTimeout(() => scanOwnPosts(doc, page), 600) as unknown as number;
   }, { passive: true });
-  // Hydration and SPA navigation land late: rescan every 5 s for two minutes.
+  // Safety net for anything the observer misses: every 2 s for the first minute, then every 10 s.
   let ticks = 0;
-  const t = setInterval(() => { n += scanOwnPosts(doc, page); if (++ticks >= 24) clearInterval(t); }, 5000);
+  const t = setInterval(() => { n += scanOwnPosts(doc, page); if (++ticks >= 30) { clearInterval(t); setInterval(() => scanOwnPosts(doc, page), 10_000); } }, 2000);
   setTimeout(() => {
     const ok = n > 0 || total7 !== null;
     void health(page, ok, ok ? undefined : 'no own posts or 7-day total seen');

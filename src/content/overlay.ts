@@ -64,20 +64,21 @@ export async function mountDayOverlay(parent: Element, before: Element | null, o
   if (!resp || resp.enabled === false) { host.remove(); return; }
   const v = resp.view;
   if (!v || v.dailyNowSource === 'none') { render(host, 'Daily impressions: no reading for today yet', 'card'); return; }
-  const tip = `pace needs ${fmt(v.pace)} per day · 80% interval ${fmt(v.low)} to ${fmt(v.high)} · ${v.regime}`;
+  let tip = `pace needs ${fmt(v.pace)} per day · 80% interval ${fmt(v.low)} to ${fmt(v.high)} · ${v.regime}`;
   // Match LinkedIn's selected window: N-1 completed days plus today (as many as were captured).
   const hist = (resp.history ?? []).slice(-days);
   const eodDaily = v.early || !Number.isFinite(v.point) ? 0 : v.point;
   let run = 0;
   const cumulative = hist.map(h => ({ ...h, impressions: (run += h.impressions) }));
   const windowEod = eodDaily ? run - v.dailyNow + eodDaily : 0;
-  const captured = hist.length < days ? ` <span class="sep">·</span>${hist.length} of ${days} days captured` : '';
+  const captured = hist.length < days ? ` · ${hist.length} of ${days} days captured` : '';
   const dayLine = v.early
     ? `Daily impressions${sep}<b>${fmt(v.dailyNow)}</b> now${sep}end of day estimate from 06:00 UTC`
     : `Daily impressions${sep}<b>${fmt(v.dailyNow)}</b> now${sep}<b>${fmt(v.point)}</b> by end of day`;
   const totalLine = v.early
-    ? `${days}-day total${sep}<b>${fmt(run)}</b> now${captured}`
-    : `${days}-day total${sep}<b>${fmt(run)}</b> now${sep}<b>${fmt(windowEod)}</b> by end of day${captured}`;
+    ? `${days}-day total${sep}<b>${fmt(run)}</b> now`
+    : `${days}-day total${sep}<b>${fmt(run)}</b> now${sep}<b>${fmt(windowEod)}</b> by end of day`;
+  tip += captured;
   const head = opts.daily ? `${dayLine}<span class="sub">${totalLine}</span>` : `${totalLine}<span class="sub">${dayLine}</span>`;
   const points: DayHistory[] = opts.daily ? hist : cumulative;
   const eod = opts.daily ? eodDaily : windowEod;

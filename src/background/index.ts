@@ -2,7 +2,7 @@
 import type { ContentMessage, Post, Settings } from '../shared/types';
 import {
   ingestSnapshot, ingestDaily, ingestTotal7, ingestPosts, ingestFollowers, computePostView, computeDayView, livePosts,
-  accuracyStats, onNewPost, initModelFromData, goalSuggestion, logDayForecasts, ensurePost,
+  accuracyStats, onNewPost, initModelFromData, goalSuggestion, logDayForecasts, ensurePost, dayHistory,
 } from './engine';
 import { getSettings, setSettings, getModel, setModel, getOnboarding, setOnboarding, getHealth, timezone, getLocal, setLocal } from './state';
 import { allDaily, allPosts, allSnapshots, dumpAll, restoreAll, clearAll, putDaily, putPost, getPost, addSnapshot, putFollower, allNudges, type Dump } from './store';
@@ -114,7 +114,7 @@ async function handle(msg: AnyMessage, sender: chrome.runtime.MessageSender): Pr
     case 'forecast:day': {
       const settings = await getSettings();
       if (!settings.overlay) return { enabled: false };
-      return { enabled: true, view: await computeDayView() };
+      return { enabled: true, view: await computeDayView(), history: await dayHistory() };
     }
     case 'ui:getState': return uiState();
     case 'ui:setSettings': {

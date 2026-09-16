@@ -30,9 +30,18 @@ export async function ensurePost(seen: PostSeen, now = new Date()): Promise<{ po
     let changed = false;
     if (seen.type && seen.type !== 'unknown' && existing.type === 'unknown') { existing.type = seen.type; changed = true; }
     if (seen.textPreview && !existing.textPreview) { existing.textPreview = seen.textPreview; changed = true; }
-    if (existing.publishedApprox && seen.ageHintHours !== undefined) {
-      const r = resolvePublishedAt(seen.urn, now, { ageHintHours: seen.ageHintHours, localHourOf: d => localHour(d, tz) });
-      if (!r.approx) { existing.publishedAt = r.publishedAt.toISOString(); existing.publishedApprox = false; changed = true; }
+    if (seen.ageHintHours !== undefined && seen.ageHintHours !== null) {
+      // The page's relative label always wins over the URN decode: URNs are minted at draft or
+      // schedule time. "2h" means an age in [2h, 3h); accept the stored time inside that window.
+      const hint = seen.ageHintHours;
+      const unit = hint < 1 ? 1 / 60 : hint < 24 ? 1 : hint < 168 ? 24 : 168;
+      const age = hoursBetween(existing.publishedAt, now);
+      if (age < hint - 0.2 || age > hint + unit + 0.2) {
+        existing.publishedAt = new Date(now.getTime() - (hint + unit / 2) * HOUR).toISOString();
+        existing.publishedApprox = true;
+        changed = true;
+        if (existing.actual24h !== undefined && hoursBetween(existing.publishedAt, now) < 23.5) await undoActual(existing);
+      }
     }
     if (changed) await putPost(existing);
     return { post: existing, created: false };
@@ -77,6 +86,20 @@ export async function ingestSnapshot(snap: Snapshot & { post?: PostSeen }): Prom
   if (created && ageH < 3 && newPostHook) await newPostHook(post);
   await checkPostActual(post, snaps);
   return computePostView(post.urn, snaps);
+}
+
+/** A frozen 24h actual turned out to come from a wrong publish time: drop it and its learning. */
+async function undoActual(post: Post) {
+  const model = await getModel();
+  const v = post.actual24h!;
+  const drop = (xs: number[]) => { const i = xs.indexOf(v); return i >= 0 ? [...xs.slice(0, i), ...xs.slice(i + 1)] : xs; };
+  const typeActuals = { ...model.typeActuals, [post.type]: drop(model.typeActuals[post.type] ?? []) };
+  await setModel({ ...model, recentTotals: drop(model.recentTotals), typeActuals, nPostActuals: Math.max(0, model.nPostActuals - 1) });
+  for (const f of await forecastsFor(post.urn)) {
+    if (f.actual !== undefined) { delete f.actual; delete f.errorPct; delete f.inBand; await putForecast(f); }
+  }
+  delete post.actual24h;
+  delete post.actual24hApprox;
 }
 
 async function checkPostActual(post: Post, snaps: Snapshot[]) {
@@ -326,6 +349,14 @@ export async function computeDayView(now = new Date()): Promise<DayForecastView>
     postByLocal: fmtLocalTime(postByUtc, tz),
   };
   return view;
+}
+
+/** Last 7 completed days plus today, for the analytics-card chart. */
+export async function dayHistory(now = new Date()): Promise<{ utcDate: string; impressions: number; today: boolean }[]> {
+  const today = utcDateOf(now);
+  const daily = (await allDaily()).filter(d => d.utcDate < today).slice(-7);
+  const dn = await dailyNowFor(today, now);
+  return [...daily.map(d => ({ utcDate: d.utcDate, impressions: d.impressions, today: false })), { utcDate: today, impressions: dn.value, today: true }];
 }
 
 export async function logDayForecasts(now = new Date()) {

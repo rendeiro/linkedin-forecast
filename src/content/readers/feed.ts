@@ -1,10 +1,12 @@
 import { SEL } from '../selectors';
 import { send, health, cardOf, readImpressionsFromCard, detectPostType, readAgeHint, textPreview, readTotal7 } from './common';
 import { urnFromHref } from '../../model/urn';
-import type { PageType } from '../../shared/types';
+import type { PageType, PostForecastView } from '../../shared/types';
 import { mountPostOverlay } from '../overlay';
 
 const seenMinute = new Map<string, string>();
+const mounted = new Map<string, Element>();
+let refreshTimer: number | undefined;
 
 export function scanOwnPosts(doc: Document, page: PageType): number {
   const links = Array.from(doc.querySelectorAll(SEL.ownPostAnalyticsLink));
@@ -19,8 +21,11 @@ export function scanOwnPosts(doc: Document, page: PageType): number {
     const impressions = readImpressionsFromCard(card, link);
     const minuteKey = new Date().toISOString().slice(0, 16);
     if (impressions === null) continue;
+    mounted.set(urn, card);
     if (seenMinute.get(urn) !== minuteKey) {
       seenMinute.set(urn, minuteKey);
+      n++;
+      // Render from the reply so the line never races the ingest.
       void send({
         type: 'snapshot',
         payload: {
@@ -28,10 +33,18 @@ export function scanOwnPosts(doc: Document, page: PageType): number {
           source: page === 'post_page' ? 'post_page' : 'feed',
           post: { urn, type: detectPostType(card), textPreview: textPreview(card), ageHintHours: readAgeHint(card) ?? undefined },
         },
+      }).then(resp => {
+        const r = resp as { view?: PostForecastView | null } | undefined;
+        void mountPostOverlay(card, urn, r?.view ?? undefined);
       });
-      n++;
+    } else {
+      void mountPostOverlay(card, urn);
     }
-    mountPostOverlay(card, urn);
+  }
+  if (refreshTimer === undefined) {
+    refreshTimer = setInterval(() => {
+      for (const [u, c] of mounted) { if (c.isConnected) void mountPostOverlay(c, u); else mounted.delete(u); }
+    }, 60_000) as unknown as number;
   }
   return n;
 }

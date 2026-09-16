@@ -19,7 +19,14 @@ async function run() {
       if (chart) {
         let block: Element = chart;
         for (let i = 0; i < 4 && block.parentElement && block.parentElement.children.length === 1; i++) block = block.parentElement;
-        if (block.parentElement) void mountDayOverlay(block.parentElement, block);
+        const daily = isDailySelected(document);
+        if (block.parentElement) {
+          const parent = block.parentElement;
+          const mount = () => mountDayOverlay(parent, block, { daily: isDailySelected(document), chartBlock: block });
+          void mount();
+          void daily;
+          setInterval(mount, 60_000);
+        }
       }
     } else if (URL_PATTERNS.postSummary.test(url)) {
       await readPostSummary(document, url);
@@ -48,3 +55,10 @@ setInterval(() => {
 }, 1000);
 
 run();
+
+function isDailySelected(doc: Document): boolean {
+  const els = Array.from(doc.querySelectorAll('button, [role="button"], [role="combobox"], select'));
+  const txt = (e: Element) => (e.textContent || '').trim();
+  if (els.some(e => /^cumulative$/i.test(txt(e)))) return false;
+  return els.some(e => /^daily$/i.test(txt(e)));
+}

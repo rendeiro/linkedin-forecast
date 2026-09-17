@@ -21,7 +21,7 @@
     today: dayView, live,
     accuracy: { byHorizon: { '24h': { n: 14, mape: 0.21, coverage: 0.79 }, eod: { n: 22, mape: 0.09, coverage: 0.82 }, dayahead: { n: 9, mape: 0.31, coverage: 0.67 } }, byShare: { '<0.25': { n: 6, mape: 0.34 }, '0.25-0.5': { n: 8, mape: 0.19 }, '0.5-0.8': { n: 12, mape: 0.11 }, '>0.8': { n: 10, mape: 0.05 } }, byType: { image: { n: 9, mape: 0.2 }, text: { n: 5, mape: 0.23 } }, eodErrors: [-0.12, 0.08, 0.04, -0.06, 0.11, -0.03, 0.07].map((e, i) => ({ utcDate: day(7 - i), errorPct: e })), sdScale: { post: 1, day: 0.9 } },
     autovisit: { count: 14, failures: 0, backoff: 1 },
-    goal: { target: 160000, recordedMonth: 78400, todayEod: 6105, monthEod: 84505, daysLeft: 15, paceNeeded: 5440, expectedByNow: 82600, postedToday: 1, verdict: 'on-pace', secondPostAdd: 1540, bestSlot: 17, postByLocal: '12:12', suggestion: 156000 },
+    goal: { target: 160000, recordedMonth: 78400, todayEod: 6105, monthEod: 84505, daysLeft: 15, paceNeeded: 5440, expectedByNow: 82600, postedToday: 1, verdict: 'on-pace', secondPostAdd: 1540, bestSlot: 17, postByLocal: '12:12', suggestion: 156000, scenario: { slotLocal: '18:00', tomorrowLocal: '09:00', second: true, addToday: 900, lossToday: 170, netToday: 730, reach48Today: 1610, reach48Tomorrow: 2460, sacrifice: 850 } },
     model: { regime: 'calibrating', nPostActuals: 14, recentTotals: [2100, 2600, 1900, 3400, 2200], recentDaily: daily, sdScale: { post: 1, day: 0.9 } },
     daily: Array.from({ length: 28 }, (_, i) => ({ utcDate: day(27 - i), impressions: [3100, 2800, 4200, 3900, 2600, 2100, 2300][i % 7] + (i * 37) % 900, final: i < 27, source: 'analytics' })),
     goalSuggestion: 156000, postsToRead: [], timezone: 'Europe/Madrid', analyticsUrl: '#',

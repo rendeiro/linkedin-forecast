@@ -133,3 +133,22 @@ describe('post end-of-day forecast', () => {
     expect(postEod(2, 20, 845, [2000]).point).toBeGreaterThan(postEod(2, 5, 845, [2000]).point);
   });
 });
+
+describe('post timing scenario', () => {
+  it('second post today: keeps 70%, takes 30% of the earlier post, and 48h totals favour holding', async () => {
+    const { postTimingScenario, interp, S_POST_PRIOR } = await import('../src/model/simple');
+    // 14:00 local, slot 18:00 (4h away), UTC midnight 10h away, tomorrow 09:00 is 19h away; one post 6h old, scale 2400.
+    const s = postTimingScenario(2400, 4, 10, 19, [[6, 2400]]);
+    expect(s.addToday).toBeCloseTo(0.7 * 2400 * interp(S_POST_PRIOR, 6), 6);
+    expect(s.lossToday).toBeCloseTo(0.3 * 2400 * (interp(S_POST_PRIOR, 16) - interp(S_POST_PRIOR, 10)), 6);
+    expect(s.netToday).toBeCloseTo(s.addToday - s.lossToday, 6);
+    expect(s.reach48Tomorrow).toBeGreaterThan(s.reach48Today);
+    expect(s.sacrifice).toBeCloseTo(s.reach48Tomorrow - s.reach48Today, 6);
+  });
+  it('first post of the day: no retention cut and no loss', async () => {
+    const { postTimingScenario } = await import('../src/model/simple');
+    const s = postTimingScenario(2400, 4, 10, 19, []);
+    expect(s.lossToday).toBe(0);
+    expect(s.reach48Today).toBeGreaterThan(s.reach48Tomorrow);
+  });
+});

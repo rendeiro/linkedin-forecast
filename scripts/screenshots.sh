@@ -7,4 +7,4 @@ shot() { "$CHROME" --headless=new --disable-gpu --hide-scrollbars --allow-file-a
 shot post-line 700,760 post.html
 shot analytics-daily 820,720 analytics.html
 shot popup-live 500,700 "popup.html#posts"
-shot popup-today 500,760 "popup.html#today"
+shot popup-today 500,900 "popup.html#today"

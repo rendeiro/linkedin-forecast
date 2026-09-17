@@ -82,6 +82,25 @@ function Today({ s, reload }: { s: State; reload: () => void }) {
         <div class="dim">{body}</div>
       </div>
 
+      {g.scenario && (
+        <div class="decision" title="Assumes one post in hand, a typical post for this account, and that it would be tomorrow's only post if held.">
+          <div class="decision-head" style="font-size:13px">{g.scenario.second ? 'A second post' : 'A post'} at {g.scenario.slotLocal} today, or hold it for {g.scenario.tomorrowLocal} tomorrow</div>
+          <table class="scn">
+            <thead><tr><th></th><th class="n">Today</th><th class="n">Next 48h</th></tr></thead>
+            <tbody>
+              <tr><td>Post at {g.scenario.slotLocal}</td><td class="n"><b>+{fmt(g.scenario.netToday)}</b></td><td class="n"><b>{fmt(g.scenario.reach48Today)}</b></td></tr>
+              <tr><td>Hold for tomorrow</td><td class="n">+0</td><td class="n"><b>{fmt(g.scenario.reach48Tomorrow)}</b></td></tr>
+            </tbody>
+          </table>
+          <div class="dim" style="margin-top:6px">
+            {g.scenario.second && g.scenario.lossToday > 0 ? `Today: the new post adds ${fmt(g.scenario.addToday)}, your earlier post loses ${fmt(g.scenario.lossToday)}. ` : ''}
+            {g.scenario.sacrifice > 0
+              ? `Posting today gives up ${fmt(g.scenario.sacrifice)} of 48h reach compared with holding.`
+              : `Holding gives up ${fmt(-g.scenario.sacrifice)} of 48h reach compared with posting today.`}
+          </div>
+        </div>
+      )}
+
       <h2>Month</h2>
       {g.target > 0 && !editing ? (<>
         <div class="row"><span>Target</span><span><b>{fmt(g.target)}</b> <a href="#" onClick={e => { e.preventDefault(); setEditing(true); }}>edit</a></span></div>

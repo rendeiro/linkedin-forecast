@@ -54,3 +54,7 @@ pre { font-size:11px; background:#f0f0f0; padding:8px; border-radius:6px; overfl
 .post-row { display:flex; gap:12px; align-items:center; margin-top:6px; }
 .spark-svg { flex:none; }
 .tag.good { color:#166534; border-color:#bbe5c8; }
+
+.scn { margin-top:8px; }
+.scn td, .scn th { border-bottom:0; padding:3px 0; }
+.decision + .decision { margin-top:8px; }

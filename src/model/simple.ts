@@ -277,6 +277,36 @@ export function secondPostAdd(medianRecent: number, hRemaining: number, sPost: T
   return SECOND_POST_RETENTION * medianRecent * interp(sPost, Math.min(Math.max(hRemaining, 0), 24));
 }
 
+export interface PostTimingScenario {
+  addToday: number;          // what the new post itself earns before UTC midnight
+  lossToday: number;         // what today's earlier posts lose before UTC midnight
+  netToday: number;
+  reach48Today: number;      // 48h from now: the new post, minus the cannibalised part of earlier posts
+  reach48Tomorrow: number;   // 48h from now: the same post held for tomorrow's slot, at full strength
+  sacrifice: number;         // reach48Tomorrow - reach48Today. Positive: posting today costs this much
+}
+
+/**
+ * One post in hand: use it today at a slot `hWaitToday` hours away, or hold it `hWaitTomorrow` hours.
+ * A same-day second post keeps SECOND_POST_RETENTION of a normal post and takes 30% of what the
+ * earlier posts would still have earned. `earlier` lists today's posts as [hours since publish, 24h scale].
+ */
+export function postTimingScenario(
+  medianRecent: number, hWaitToday: number, hToMidnight: number, hWaitTomorrow: number,
+  earlier: [number, number][], sPost: Table = S_POST_PRIOR,
+): PostTimingScenario {
+  const second = earlier.length > 0;
+  const keep = second ? SECOND_POST_RETENTION : 1;
+  const take = second ? 1 - SECOND_POST_RETENTION : 0;
+  const share = (h: number) => (h <= 0 ? 0 : shareAt(sPost, h));
+  const addToday = keep * medianRecent * share(hToMidnight - hWaitToday);
+  const remain = (from: number, to: number) => earlier.reduce((a, [h, scale]) => a + Math.max(0, share(h + to) - share(h + from)) * scale, 0);
+  const lossToday = take * remain(hWaitToday, Math.max(hToMidnight, hWaitToday));
+  const reach48Today = keep * medianRecent * share(48 - hWaitToday) - take * remain(hWaitToday, 48);
+  const reach48Tomorrow = medianRecent * share(48 - hWaitTomorrow);
+  return { addToday, lossToday, netToday: addToday - lossToday, reach48Today, reach48Tomorrow, sacrifice: reach48Tomorrow - reach48Today };
+}
+
 /** Linear interpolation of impressions over snapshots [(hoursSincePublish, impressions)], sorted by time. */
 export function impressionsAt(points: [number, number][], h: number): number {
   if (points.length === 0) return 0;

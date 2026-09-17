@@ -11,7 +11,7 @@ import {
 } from './store';
 import { getModel, getOnboarding, getSettings, setModel, setOnboarding, timezone } from './state';
 import {
-  dailyEod, dayAhead, evalTail, interp, learnDay, learnDow, learnPost, median, mean, postByHoursBeforeMidnight, postEod, initialModel, secondPostAdd as secondPostAddFn,
+  dailyEod, dayAhead, evalTail, interp, learnDay, learnDow, learnPost, median, mean, postByHoursBeforeMidnight, postEod, initialModel, secondPostAdd as secondPostAddFn, postTimingScenario,
   recentTotalsOrLifetime, regimeOf, shiftSDay, typeFactor, MODEL_VERSION, pace as paceOf,
 } from '../model/simple';
 import { resolvePublishedAt } from '../model/urn';
@@ -459,6 +459,27 @@ export async function goalView(now = new Date()): Promise<GoalView> {
   const slotUtcOffsetH = (lh - utcHourOf(now) + 48) % 24;
   const hRemaining = 24 - ((slot - slotUtcOffsetH + 24) % 24);
   const secondPostAdd = recent.length ? secondPostAddFn(median(recent), hRemaining, model.sPost) : 0;
+  // One post in hand: today at 18:00 (or the next whole hour) versus tomorrow at the usual hour.
+  let scenario: GoalView['scenario'];
+  if (recent.length && lh < 22) {
+    const slotToday = lh < 18 ? 18 : Math.ceil(lh + 0.01);
+    const hWaitToday = slotToday - lh;
+    const all = await allPosts();
+    const usual = all.filter(p => p.timeTrusted).slice(-10).map(p => localHour(p.publishedAt, tz));
+    const tomorrowHour = usual.length >= 3 ? Math.round(median(usual)) : 9;
+    const hWaitTomorrow = 24 - lh + tomorrowHour;
+    const hToMidnight = 24 - utcHourOf(now);
+    const earlier: [number, number][] = [];
+    for (const p of all) {
+      const t = new Date(p.publishedAt).getTime();
+      if (t < start || t > now.getTime()) continue;
+      const v = await computePostView(p.urn, undefined, now);
+      if (v?.total24) earlier.push([v.hours, v.total24]);
+    }
+    const sc = postTimingScenario(median(recent), hWaitToday, hToMidnight, hWaitTomorrow, earlier, model.sPost);
+    const hh = (h: number) => `${String(h % 24).padStart(2, '0')}:00`;
+    scenario = { slotLocal: hh(slotToday), tomorrowLocal: hh(tomorrowHour), second: earlier.length > 0, ...sc };
+  }
   let verdict: GoalView['verdict'];
   if (target <= 0) verdict = 'set-target';
   else if (postedToday === 0) verdict = 'post-first';
@@ -467,7 +488,7 @@ export async function goalView(now = new Date()): Promise<GoalView> {
   else verdict = 'post-again';
   return {
     target, recordedMonth, todayEod, monthEod: recordedMonth + todayEod, daysLeft, paceNeeded, expectedByNow, postedToday,
-    verdict, secondPostAdd, bestSlot: slot, postByLocal: day.postByLocal, suggestion: await goalSuggestion(),
+    verdict, secondPostAdd, bestSlot: slot, postByLocal: day.postByLocal, suggestion: await goalSuggestion(), scenario,
   };
 }
 

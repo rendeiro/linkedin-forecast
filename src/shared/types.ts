@@ -172,6 +172,7 @@ export interface GoalView {
   bestSlot: number;
   postByLocal?: string;
   suggestion: number;
+  scenario?: { slotLocal: string; tomorrowLocal: string; addToday: number; lossToday: number; netToday: number; reach48Today: number; reach48Tomorrow: number; sacrifice: number; second: boolean };
 }
 
 export interface DayForecastView {

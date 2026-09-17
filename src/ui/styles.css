@@ -55,6 +55,7 @@ pre { font-size:11px; background:#f0f0f0; padding:8px; border-radius:6px; overfl
 .spark-svg { flex:none; }
 .tag.good { color:#166534; border-color:#bbe5c8; }
 
-.scn { margin-top:8px; }
+.scn { margin-top:0; }
+.scn th:first-child { color:var(--fg); font-weight:600; font-size:13px; }
 .scn td, .scn th { border-bottom:0; padding:3px 0; }
 .decision + .decision { margin-top:8px; }

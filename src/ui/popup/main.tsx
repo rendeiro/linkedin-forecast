@@ -83,21 +83,15 @@ function Today({ s, reload }: { s: State; reload: () => void }) {
       </div>
 
       {g.scenario && (
-        <div class="decision" title="Assumes one post in hand, a typical post for this account, and that it would be tomorrow's only post if held.">
-          <div class="decision-head" style="font-size:13px">{g.scenario.second ? 'A second post' : 'A post'} at {g.scenario.slotLocal} today, or hold it for {g.scenario.tomorrowLocal} tomorrow</div>
+        <div class="decision" title={`${g.scenario.second ? `New post adds ${fmt(g.scenario.addToday)} today, earlier post loses ${fmt(g.scenario.lossToday)}. ` : ''}Assumes a typical post, and that a held post is tomorrow's only post.`}>
           <table class="scn">
-            <thead><tr><th></th><th class="n">Today</th><th class="n">Next 48h</th></tr></thead>
+            <thead><tr><th>{g.scenario.second ? 'Second post' : 'Next post'}</th><th class="n">Today</th><th class="n">48h</th></tr></thead>
             <tbody>
-              <tr><td>Post at {g.scenario.slotLocal}</td><td class="n"><b>+{fmt(g.scenario.netToday)}</b></td><td class="n"><b>{fmt(g.scenario.reach48Today)}</b></td></tr>
-              <tr><td>Hold for tomorrow</td><td class="n">+0</td><td class="n"><b>{fmt(g.scenario.reach48Tomorrow)}</b></td></tr>
+              <tr><td>Today {g.scenario.slotLocal}</td><td class="n">+{fmt(g.scenario.netToday)}</td><td class="n"><b>{fmt(g.scenario.reach48Today)}</b></td></tr>
+              <tr><td>Tomorrow {g.scenario.tomorrowLocal}</td><td class="n">+0</td><td class="n"><b>{fmt(g.scenario.reach48Tomorrow)}</b></td></tr>
             </tbody>
           </table>
-          <div class="dim" style="margin-top:6px">
-            {g.scenario.second && g.scenario.lossToday > 0 ? `Today: the new post adds ${fmt(g.scenario.addToday)}, your earlier post loses ${fmt(g.scenario.lossToday)}. ` : ''}
-            {g.scenario.sacrifice > 0
-              ? `Posting today gives up ${fmt(g.scenario.sacrifice)} of 48h reach compared with holding.`
-              : `Holding gives up ${fmt(-g.scenario.sacrifice)} of 48h reach compared with posting today.`}
-          </div>
+          <div class="dim" style="margin-top:4px">{g.scenario.sacrifice > 0 ? `Waiting wins by ${fmt(g.scenario.sacrifice)}.` : `Posting today wins by ${fmt(-g.scenario.sacrifice)}.`}</div>
         </div>
       )}
 

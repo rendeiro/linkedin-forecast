@@ -74,6 +74,7 @@ function Today({ s, reload }: { s: State; reload: () => void }) {
       <div class="dim">Daily impressions</div>
       <div class="big">{none ? '–' : fmt(t.dailyNow)} <span class="dim" style="font-size:15px; font-weight:400">now</span></div>
       {!none && !t.early && <div style="margin-top:4px"><b>{fmt(t.point)}</b> by end of day <span class="dim">({fmt(t.low)} to {fmt(t.high)})</span></div>}
+      {!none && !t.early && <RangeNote t={t} />}
       {!none && t.early && <div class="dim" style="margin-top:4px">End of day estimate from 06:00 UTC.</div>}
       {none && <div class="note" style="margin-top:8px">No reading for today yet. Open <a href={s.analyticsUrl} target="_blank">your analytics</a> once.</div>}
 
@@ -118,6 +119,30 @@ function Today({ s, reload }: { s: State; reload: () => void }) {
       <h2>Last 28 days</h2>
       <Bars daily={s.daily} />
     </section>
+  );
+}
+
+/** Why the range is what it is right now, and where it goes through the day. */
+function RangeNote({ t }: { t: DayForecastView }) {
+  const later = t.rangeByHour.filter(r => r.pct < t.rangePct * 0.6).sort((a, b) => a.localHour - b.localHour)[0];
+  return (
+    <div class="dim" style="font-size:12px; margin-top:2px" title={`${t.rangeSource === 'measured' ? `Measured from your last ${t.rangeDays} closed days` : 'Prior curve, not yet measured on your days'}. Detail in the Accuracy tab.`}>
+      Range ±{Math.round(t.rangePct * 100)}% at this hour{later ? `, about ±${Math.round(later.pct * 100)}% by ${String(later.localHour).padStart(2, '0')}:00` : ''}.
+    </div>
+  );
+}
+
+function RangeByHour({ t }: { t: DayForecastView }) {
+  const max = Math.max(...t.rangeByHour.map(r => r.pct), 0.05);
+  return (
+    <div>
+      <div class="hours">
+        {t.rangeByHour.map(r => (
+          <div class="hour"><i style={`height:${Math.max(6, (r.pct / max) * 100)}%`} /><span>±{Math.round(r.pct * 100)}%</span><small>{String(r.localHour).padStart(2, '0')}</small></div>
+        ))}
+      </div>
+      <div class="dim" style="font-size:11px">{t.rangeSource === 'measured' ? `Measured from your last ${t.rangeDays} closed days, by local hour.` : 'Prior curve. Measured from your own days once 8 readings exist near each hour.'}</div>
+    </div>
   );
 }
 
@@ -201,6 +226,8 @@ function Accuracy({ s }: { s: State }) {
       <div class="note">Every forecast is kept and scored against the actual once it lands. Rolling 14 days. Confidence: <b>{s.model.regime}</b>, {REGIME_TIP[s.model.regime].toLowerCase()}</div>
       {line('End of day', eod, 'days')}
       {line('Posts at 24h', post, 'posts')}
+      <h2>How the day range tightens</h2>
+      <RangeByHour t={s.today} />
       <h2>End of day, forecast versus actual</h2>
       {errs.length ? (<>
         <div class="spark" title={errs.map(e => `${e.utcDate}: ${e.errorPct > 0 ? 'too high' : 'too low'} by ${pct(Math.abs(e.errorPct))}`).join('\n')}>

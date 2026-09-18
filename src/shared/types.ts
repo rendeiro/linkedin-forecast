@@ -189,4 +189,8 @@ export interface DayForecastView {
   fromTails: number;
   regime: Regime;
   postByLocal?: string;
+  rangePct: number;             // half-width of the 80% range as a share of the point, at this hour
+  rangeByHour: { localHour: number; pct: number }[];
+  rangeSource: 'measured' | 'prior';
+  rangeDays: number;            // closed days behind the measured range
 }

@@ -77,6 +77,8 @@ export const addNudge = (n: NudgeRecord) => db.add('nudges', n);
 export const putNudge = (n: NudgeRecord) => db.put('nudges', n);
 export const allNudges = () => db.getAll<NudgeRecord>('nudges');
 
+export const clearForecasts = () => db.clear('forecasts');
+
 export async function clearAll() {
   for (const s of ['posts', 'snapshots', 'daily', 'dailyReadings', 'followers', 'forecasts', 'nudges'] as StoreName[]) await db.clear(s);
 }

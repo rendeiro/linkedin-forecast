@@ -35,7 +35,7 @@ describe('end-to-end replay', () => {
     let within = 0, covered = 0;
     for (const day of fx.replay) {
       const r = day.readings.find(x => utcHourOf(x.observedAt) === 16)!;
-      const f = dailyEod(16, r.value, { sDay: model.sDay, sdScale: model.sdScale.day });
+      const f = dailyEod(16, r.value, { sDay: model.sDay });
       if (Math.abs(f.point - day.actual) / day.actual <= 0.15) within++;
       if (f.low <= day.actual && day.actual <= f.high) covered++;
       // The day closes: learn from all of its readings.

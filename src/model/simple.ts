@@ -4,7 +4,7 @@
  */
 import type { ModelState, PostType, Regime, Table } from '../shared/types';
 
-export const MODEL_VERSION = 2;
+export const MODEL_VERSION = 3;
 
 export const S_POST_PRIOR: Table = {
   '0.5': 0.10, '1': 0.18, '2': 0.30, '3': 0.40, '4': 0.48, '5': 0.56, '6': 0.63, '8': 0.74,
@@ -198,11 +198,29 @@ export function recentTotalsOrLifetime(recentTotals: number[], lifetimes: number
 
 export interface DayForecast { point: number; low: number; high: number; share: number; sd: number; }
 
-export function dailyEod(u: number, dailyNow: number, opts: { sDay?: Table; sdScale?: number } = {}): DayForecast {
+export function priorDaySd(share: number): number {
+  return 0.06 + 0.35 * (1 - Math.min(share, 1));
+}
+
+/**
+ * Interval width measured from the account's own closed days: the spread of
+ * log(actual / (reading / share)) over readings taken within 2 hours of `u`.
+ * Returns null when fewer than 8 such readings exist.
+ */
+export function measuredDaySd(pairs: { u: number; value: number; actual: number }[], u: number, sDay: Table = S_DAY_PRIOR): { sd: number; n: number } | null {
+  const near = pairs.filter(p => Math.abs(p.u - u) <= 2 && p.value > 0 && p.actual > 0);
+  if (near.length < 8) return null;
+  const logs = near.map(p => Math.log(p.actual / (p.value / Math.max(interp(sDay, p.u), MIN_SHARE))));
+  const m = mean(logs);
+  const sd = Math.sqrt(mean(logs.map(x => (x - m) * (x - m))));
+  return { sd: Math.max(sd, 0.03), n: near.length };
+}
+
+export function dailyEod(u: number, dailyNow: number, opts: { sDay?: Table; sd?: number } = {}): DayForecast {
   const sDay = opts.sDay ?? S_DAY_PRIOR;
   const s = Math.max(interp(sDay, u), MIN_SHARE);
   const total = dailyNow / s;
-  const sd = (0.06 + 0.35 * (1 - Math.min(s, 1))) * (opts.sdScale ?? 1);
+  const sd = opts.sd ?? priorDaySd(s);
   return { point: total, low: total * Math.exp(-Z80 * sd), high: total * Math.exp(Z80 * sd), share: s, sd };
 }
 

@@ -7,11 +7,11 @@ import type {
 } from '../shared/types';
 import {
   addDailyReading, addForecast, addSnapshot, allDaily, allForecasts, allPosts, allSnapshots, forecastsFor, getDaily, getPost,
-  putDaily, putForecast, putPost, readingsFor, snapshotsFor, putFollower,
+  putDaily, putForecast, putPost, readingsFor, snapshotsFor, putFollower, clearForecasts,
 } from './store';
 import { getModel, getOnboarding, getSettings, setModel, setOnboarding, timezone } from './state';
 import {
-  dailyEod, dayAhead, evalTail, interp, learnDay, learnDow, learnPost, median, mean, postByHoursBeforeMidnight, postEod, initialModel, secondPostAdd as secondPostAddFn, postTimingScenario,
+  dailyEod, dayAhead, evalTail, interp, learnDay, learnDow, learnPost, median, mean, postByHoursBeforeMidnight, postEod, initialModel, secondPostAdd as secondPostAddFn, postTimingScenario, measuredDaySd, priorDaySd,
   recentTotalsOrLifetime, regimeOf, shiftSDay, typeFactor, MODEL_VERSION, pace as paceOf,
 } from '../model/simple';
 import { resolvePublishedAt } from '../model/urn';
@@ -234,23 +234,6 @@ async function fillForecasts(target: 'post' | 'day', key: string, actual: number
     await putForecast(f);
     touched = true;
   }
-  if (touched) await calibrateIntervals();
-}
-
-/** §7: widen or narrow sd by 10% when coverage over 20+ forecasts drifts outside 65 to 92%. */
-async function calibrateIntervals() {
-  const fs = (await allForecasts()).filter(f => f.inBand !== undefined);
-  const model = await getModel();
-  const adjust = (xs: ForecastRecord[], cur: number) => {
-    if (xs.length < 20) return cur;
-    const cov = xs.filter(f => f.inBand).length / xs.length;
-    if (cov < 0.65) return Math.min(cur * 1.1, 3);
-    if (cov > 0.92) return Math.max(cur * 0.9, 0.4);
-    return cur;
-  };
-  const post = adjust(fs.filter(f => f.target === 'post').slice(-60), model.sdScale.post);
-  const day = adjust(fs.filter(f => f.target === 'day' && f.horizon === 'eod').slice(-60), model.sdScale.day);
-  if (post !== model.sdScale.post || day !== model.sdScale.day) await setModel({ ...model, sdScale: { post, day } });
 }
 
 export async function recentTotalsFor(model: ModelState): Promise<number[]> {
@@ -271,7 +254,7 @@ export async function computePostView(urn: string, snaps?: Snapshot[], now = new
   const hToMidnight = 24 - utcHourOf(now);
   const recent = await recentTotalsFor(model);
   const tf = model.recentTotals.length >= 3 ? typeFactor(model, post.type) : 1;
-  const f = postEod(h, hToMidnight, latest.impressions, recent, { sPost: model.sPost, typeFactor: tf, inNetworkShare: latest.inNetworkShare, sdScale: model.sdScale.post });
+  const f = postEod(h, hToMidnight, latest.impressions, recent, { sPost: model.sPost, typeFactor: tf, inNetworkShare: latest.inNetworkShare });
   const points: [number, number][] = ss.map(s => [hoursBetween(post.publishedAt, s.observedAt), s.impressions]);
   let gainPerHour: number | undefined;
   const earlier = [...ss].reverse().find(s => hoursBetween(s.observedAt, latest.observedAt) >= 20 / 60);
@@ -300,6 +283,7 @@ export async function computePostView(urn: string, snaps?: Snapshot[], now = new
  */
 export async function rebuildModel(): Promise<{ posts: number; trusted: number; actuals: number }> {
   await setModel(initialModel());
+  await clearForecasts();
   const posts = (await allPosts()).sort((a, b) => (a.publishedAt < b.publishedAt ? -1 : 1));
   let trusted = 0, actuals = 0;
   for (const p of posts) {
@@ -307,7 +291,6 @@ export async function rebuildModel(): Promise<{ posts: number; trusted: number; 
     if (p.timeTrusted === undefined) p.timeTrusted = ss.length > 0 && hoursBetween(p.publishedAt, ss[0].observedAt) <= 3;
     delete p.actual24h; delete p.actual24hApprox;
     await putPost(p);
-    for (const f of await forecastsFor(p.urn)) if (f.actual !== undefined) { delete f.actual; delete f.errorPct; delete f.inBand; await putForecast(f); }
     if (p.timeTrusted) trusted++;
   }
   for (const p of posts) {
@@ -363,6 +346,21 @@ export async function paceFor(settings: Settings, model: ModelState, today: stri
   return paceOf(settings.goal, recorded, remainingDays, last3, weekdayOfUtcDate(today), model.dow);
 }
 
+/** Readings from closed days in the last 21 days, paired with the day's final value. */
+async function dayReadingPairs(now: Date): Promise<{ u: number; value: number; actual: number }[]> {
+  const today = utcDateOf(now);
+  const from = addDaysUtc(today, -21);
+  const finals = (await allDaily()).filter(d => d.final && d.utcDate >= from && d.utcDate < today);
+  const pairs: { u: number; value: number; actual: number }[] = [];
+  for (const d of finals) {
+    for (const r of await readingsFor(d.utcDate)) {
+      if (r.source === 'partial' || utcDateOf(r.observedAt) !== d.utcDate) continue;
+      pairs.push({ u: utcHourOf(r.observedAt), value: r.value, actual: d.impressions });
+    }
+  }
+  return pairs;
+}
+
 export async function computeDayView(now = new Date()): Promise<DayForecastView> {
   const today = utcDateOf(now);
   const model = await getModel();
@@ -370,7 +368,16 @@ export async function computeDayView(now = new Date()): Promise<DayForecastView>
   const tz = await timezone();
   const dn = await dailyNowFor(today, now);
   const u = utcHourOf(now);
-  const f = dailyEod(u, dn.value, { sDay: model.sDay, sdScale: model.sdScale.day });
+  const pairs = await dayReadingPairs(now);
+  const sdFor = (uu: number) => {
+    const m = measuredDaySd(pairs, uu, model.sDay);
+    return m ? { sd: m.sd, measured: true } : { sd: priorDaySd(Math.max(interp(model.sDay, uu), 0.02)), measured: false };
+  };
+  const here = sdFor(u);
+  const f = dailyEod(u, dn.value, { sDay: model.sDay, sd: here.sd });
+  const offsetH = tzOffsetMinutes(now, tz) / 60;
+  const rangeByHour = [8, 10, 12, 14, 16, 18, 20, 22].map(localH => ({ localHour: localH, pct: Math.exp(1.28 * sdFor(((localH - offsetH) % 24 + 24) % 24).sd) - 1 }));
+  const rangeDays = new Set(pairs.map(p => Math.round(p.actual))).size;
   const pace = await paceFor(settings, model, today);
   const start = new Date(today + 'T00:00:00Z').getTime();
   const posts = (await allPosts()).filter(p => new Date(p.publishedAt).getTime() >= start && new Date(p.publishedAt).getTime() <= now.getTime());
@@ -389,6 +396,7 @@ export async function computeDayView(now = new Date()): Promise<DayForecastView>
     point: dn.source === 'none' || early ? NaN : f.point, low: f.low, high: f.high, pace,
     fromTodayPosts, fromTails: Math.max(dn.value - fromTodayPosts, 0), regime,
     postByLocal: fmtLocalTime(postByUtc, tz),
+    rangePct: Math.exp(1.28 * here.sd) - 1, rangeByHour, rangeSource: here.measured ? 'measured' : 'prior', rangeDays,
   };
   return view;
 }

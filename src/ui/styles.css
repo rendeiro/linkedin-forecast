@@ -59,3 +59,8 @@ pre { font-size:11px; background:#f0f0f0; padding:8px; border-radius:6px; overfl
 .scn th:first-child { color:var(--fg); font-weight:600; font-size:13px; }
 .scn td, .scn th { border-bottom:0; padding:3px 0; }
 .decision + .decision { margin-top:8px; }
+
+.hours { display:flex; gap:6px; align-items:flex-end; height:84px; margin:6px 0 4px; }
+.hour { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; font-size:10px; color:var(--dim); }
+.hour i { display:block; width:100%; background:#404040; border-radius:2px 2px 0 0; }
+.hour span { margin-top:3px; color:var(--fg); }

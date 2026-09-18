@@ -152,3 +152,16 @@ describe('post timing scenario', () => {
     expect(s.reach48Today).toBeGreaterThan(s.reach48Tomorrow);
   });
 });
+
+describe('measured day interval', () => {
+  it('needs 8 readings near the hour, then reflects the observed spread', async () => {
+    const { measuredDaySd, interp, S_DAY_PRIOR } = await import('../src/model/simple');
+    const tight = Array.from({ length: 10 }, (_, i) => ({ u: 15 + (i % 3) * 0.5, value: 3000 * interp(S_DAY_PRIOR, 15 + (i % 3) * 0.5) * (1 + (i % 2 ? 0.02 : -0.02)), actual: 3000 }));
+    expect(measuredDaySd(tight.slice(0, 5), 15)).toBeNull();
+    const m = measuredDaySd(tight, 15)!;
+    expect(m.n).toBe(10);
+    expect(m.sd).toBeLessThan(0.05);
+    const loose = tight.map((p, i) => ({ ...p, actual: i % 2 ? 4500 : 2000 }));
+    expect(measuredDaySd(loose, 15)!.sd).toBeGreaterThan(0.3);
+  });
+});

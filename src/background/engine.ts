@@ -11,7 +11,7 @@ import {
 } from './store';
 import { getModel, getOnboarding, getSettings, setModel, setOnboarding, timezone } from './state';
 import {
-  dailyEod, dayAhead, evalTail, interp, learnDay, learnDow, learnPost, median, mean, postByHoursBeforeMidnight, postEod, initialModel, secondPostAdd as secondPostAddFn, postTimingScenario, measuredDaySd, priorDaySd,
+  dailyEod, dayAhead, evalTail, interp, learnDay, learnDow, learnPost, median, mean, postByHoursBeforeMidnight, postEod, initialModel, secondPostAdd as secondPostAddFn, postTimingScenario, measuredDaySd, priorDaySd, shareAt, shiftSDay,
   recentTotalsOrLifetime, regimeOf, shiftSDay, typeFactor, MODEL_VERSION, pace as paceOf,
 } from '../model/simple';
 import { resolvePublishedAt } from '../model/urn';
@@ -374,10 +374,20 @@ export async function computeDayView(now = new Date()): Promise<DayForecastView>
     return m ? { sd: m.sd, measured: true } : { sd: priorDaySd(Math.max(interp(model.sDay, uu), 0.02)), measured: false };
   };
   const here = sdFor(u);
-  const curve = dailyEod(u, dn.value, { sDay: model.sDay, sd: here.sd });
-  // Bottom-up: today's count so far plus what each live post still earns before UTC midnight,
-  // using each post's real publish time. The day curve alone assumes the main post went out
-  // at the account's usual hour, which understates late posts.
+  const start0 = new Date(today + 'T00:00:00Z').getTime();
+  const todaysPosts = (await allPosts()).filter(p => { const t = new Date(p.publishedAt).getTime(); return t >= start0 && t <= now.getTime(); });
+  // Top-down: the day curve, shifted to when today's first post actually went out (the prior
+  // assumes 07:30 UTC; a 13:00 post makes the same count mean a much younger day).
+  let sDayToday = model.sDay;
+  if (todaysPosts.length) {
+    const firstHour = Math.min(...todaysPosts.map(p => utcHourOf(p.publishedAt)));
+    const usual = Math.min(...Object.keys(model.sDay).map(Number)) + 1.5; // first key + 1.5h ≈ the curve's implied post hour
+    if (firstHour - usual > 1) sDayToday = shiftSDay(model.sDay, 7.5 + (firstHour - usual));
+  }
+  const curveShare = Math.max(interp(sDayToday, u), 0.02);
+  const curve = dailyEod(u, dn.value, { sDay: sDayToday, sd: here.sd });
+  // Bottom-up: today's count plus what each live post still earns before UTC midnight, anchored
+  // on each post's own count (no pull toward the account median once 3h of data exist).
   let remaining = 0, liveN = 0;
   const breakdown: DayForecastView['breakdown'] = [];
   const hToMid = 24 - u;
@@ -385,23 +395,28 @@ export async function computeDayView(now = new Date()): Promise<DayForecastView>
     const v = await computePostView(p.urn, undefined, now);
     if (!v) continue;
     liveN++;
-    let r = Math.max(v.point - v.impressions, 0);
+    let r: number;
     let capped = false;
-    // Past the 24h mark the curve's tail is an assumption; the post's own measured rate is not.
-    if (v.hours > 24 && v.gainPerHour !== undefined) {
-      const byRate = Math.max(v.gainPerHour, 0) * hToMid;
-      if (byRate < r) { r = byRate; capped = true; }
+    if (v.hours > 24) {
+      r = Math.max(v.point - v.impressions, 0);
+      if (v.gainPerHour !== undefined) { const byRate = Math.max(v.gainPerHour, 0) * hToMid; if (byRate < r) { r = byRate; capped = true; } }
+    } else {
+      const sNow = shareAt(model.sPost, v.hours);
+      const scale = v.hours >= 3 ? v.impressions / sNow : (v.total24 ?? v.impressions / sNow);
+      r = Math.max(0, (shareAt(model.sPost, v.hours + hToMid) - sNow) * scale);
     }
     remaining += r;
     breakdown.push({ urn: p.urn, label: (p.textPreview ?? `Post from ${fmtLocalTime(p.publishedAt, tz)}`).replace(/\s+/g, ' ').slice(0, 40), hours: v.hours, remaining: r, capped });
   }
   breakdown.sort((a, b) => b.remaining - a.remaining);
   const usePosts = liveN > 0 && dn.source !== 'none';
-  const point = usePosts ? dn.value + remaining : curve.point;
+  // Blend in log space. The more of the day the curve has seen, the more it counts.
+  const wc = usePosts ? Math.min(0.9, Math.max(0.35, curveShare)) : 1;
+  const postsPoint = dn.value + remaining;
+  const point = usePosts && postsPoint > 0 ? Math.exp(wc * Math.log(Math.max(curve.point, 1)) + (1 - wc) * Math.log(postsPoint)) : curve.point;
   const f = { point, low: point * Math.exp(-1.28 * here.sd), high: point * Math.exp(1.28 * here.sd), share: curve.share };
-  const offsetH = tzOffsetMinutes(now, tz) / 60;
-  const rangeByHour = [8, 10, 12, 14, 16, 18, 20, 22].map(localH => ({ localHour: localH, pct: Math.exp(1.28 * sdFor(((localH - offsetH) % 24 + 24) % 24).sd) - 1 }));
-  const rangeDays = new Set(pairs.map(p => Math.round(p.actual))).size;
+  breakdown.unshift({ urn: '', label: `Day curve${sDayToday !== model.sDay ? ', shifted to today\'s first post' : ''}`, hours: -1, remaining: curve.point, capped: false });
+  breakdown.push({ urn: '', label: 'Posts method total', hours: -2, remaining: postsPoint, capped: false });
   const pace = await paceFor(settings, model, today);
   const start = new Date(today + 'T00:00:00Z').getTime();
   const posts = (await allPosts()).filter(p => new Date(p.publishedAt).getTime() >= start && new Date(p.publishedAt).getTime() <= now.getTime());

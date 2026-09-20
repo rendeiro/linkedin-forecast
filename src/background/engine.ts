@@ -11,7 +11,7 @@ import {
 } from './store';
 import { getModel, getOnboarding, getSettings, setModel, setOnboarding, timezone } from './state';
 import {
-  dailyEod, dayAhead, evalTail, interp, learnDay, learnDow, learnPost, median, mean, postByHoursBeforeMidnight, postEod, initialModel, secondPostAdd as secondPostAddFn, postTimingScenario, measuredDaySd, priorDaySd, shareAt, shiftSDay,
+  dailyEod, dayAhead, evalTail, interp, learnDay, learnDow, learnPost, median, mean, postByHoursBeforeMidnight, postEod, initialModel, secondPostAdd as secondPostAddFn, postTimingScenario, measuredDaySd, priorDaySd, shareAt,
   recentTotalsOrLifetime, regimeOf, shiftSDay, typeFactor, MODEL_VERSION, pace as paceOf,
 } from '../model/simple';
 import { resolvePublishedAt } from '../model/urn';
@@ -417,6 +417,9 @@ export async function computeDayView(now = new Date()): Promise<DayForecastView>
   const f = { point, low: point * Math.exp(-1.28 * here.sd), high: point * Math.exp(1.28 * here.sd), share: curve.share };
   breakdown.unshift({ urn: '', label: `Day curve${sDayToday !== model.sDay ? ', shifted to today\'s first post' : ''}`, hours: -1, remaining: curve.point, capped: false });
   breakdown.push({ urn: '', label: 'Posts method total', hours: -2, remaining: postsPoint, capped: false });
+  const offsetH = tzOffsetMinutes(now, tz) / 60;
+  const rangeByHour = [8, 10, 12, 14, 16, 18, 20, 22].map(localH => ({ localHour: localH, pct: Math.exp(1.28 * sdFor(((localH - offsetH) % 24 + 24) % 24).sd) - 1 }));
+  const rangeDays = new Set(pairs.map(p => Math.round(p.actual))).size;
   const pace = await paceFor(settings, model, today);
   const start = new Date(today + 'T00:00:00Z').getTime();
   const posts = (await allPosts()).filter(p => new Date(p.publishedAt).getTime() >= start && new Date(p.publishedAt).getTime() <= now.getTime());

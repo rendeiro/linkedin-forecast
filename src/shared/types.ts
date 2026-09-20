@@ -193,4 +193,5 @@ export interface DayForecastView {
   rangeByHour: { localHour: number; pct: number }[];
   rangeSource: 'measured' | 'prior';
   rangeDays: number;            // closed days behind the measured range
+  method: 'posts' | 'curve';    // posts: today's count plus each live post's remaining gain; curve: day share
 }

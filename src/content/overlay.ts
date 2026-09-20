@@ -64,7 +64,7 @@ export async function mountDayOverlay(parent: Element, before: Element | null, o
   if (!resp || resp.enabled === false) { host.remove(); return; }
   const v = resp.view;
   if (!v || v.dailyNowSource === 'none') { render(host, 'Daily impressions: no reading for today yet', 'card'); return; }
-  let tip = `pace needs ${fmt(v.pace)} per day · 80% interval ${fmt(v.low)} to ${fmt(v.high)} · ${v.regime}`;
+  let tip = `${v.method === 'posts' ? 'today so far plus each live post\'s remaining gain' : 'day curve'} · pace needs ${fmt(v.pace)} per day · 80% interval ${fmt(v.low)} to ${fmt(v.high)} · ${v.regime}`;
   // Match LinkedIn's selected window: N-1 completed days plus today (as many as were captured).
   const hist = (resp.history ?? []).slice(-days);
   const eodDaily = v.early || !Number.isFinite(v.point) ? 0 : v.point;

@@ -127,7 +127,7 @@ function RangeNote({ t }: { t: DayForecastView }) {
   const later = t.rangeByHour.filter(r => r.pct < t.rangePct * 0.6).sort((a, b) => a.localHour - b.localHour)[0];
   return (
     <div class="dim" style="font-size:12px; margin-top:2px" title={`${t.rangeSource === 'measured' ? `Measured from your last ${t.rangeDays} closed days` : 'Prior curve, not yet measured on your days'}. Detail in the Accuracy tab.`}>
-      Range ±{Math.round(t.rangePct * 100)}% at this hour{later ? `, about ±${Math.round(later.pct * 100)}% by ${String(later.localHour).padStart(2, '0')}:00` : ''}.
+      {t.method === 'posts' ? 'Today so far plus what each live post still earns. ' : 'From the day curve, no live post read yet. '}Range ±{Math.round(t.rangePct * 100)}% at this hour{later ? `, about ±${Math.round(later.pct * 100)}% by ${String(later.localHour).padStart(2, '0')}:00` : ''}.
     </div>
   );
 }

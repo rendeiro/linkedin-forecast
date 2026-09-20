@@ -374,7 +374,20 @@ export async function computeDayView(now = new Date()): Promise<DayForecastView>
     return m ? { sd: m.sd, measured: true } : { sd: priorDaySd(Math.max(interp(model.sDay, uu), 0.02)), measured: false };
   };
   const here = sdFor(u);
-  const f = dailyEod(u, dn.value, { sDay: model.sDay, sd: here.sd });
+  const curve = dailyEod(u, dn.value, { sDay: model.sDay, sd: here.sd });
+  // Bottom-up: today's count so far plus what each live post still earns before UTC midnight,
+  // using each post's real publish time. The day curve alone assumes the main post went out
+  // at the account's usual hour, which understates late posts.
+  let remaining = 0, liveN = 0;
+  for (const p of (await allPosts()).filter(p => hoursBetween(p.publishedAt, now) < 48 && hoursBetween(p.publishedAt, now) >= 0)) {
+    const v = await computePostView(p.urn, undefined, now);
+    if (!v) continue;
+    liveN++;
+    remaining += Math.max(v.point - v.impressions, 0);
+  }
+  const usePosts = liveN > 0 && dn.source !== 'none';
+  const point = usePosts ? dn.value + remaining : curve.point;
+  const f = { point, low: point * Math.exp(-1.28 * here.sd), high: point * Math.exp(1.28 * here.sd), share: curve.share };
   const offsetH = tzOffsetMinutes(now, tz) / 60;
   const rangeByHour = [8, 10, 12, 14, 16, 18, 20, 22].map(localH => ({ localHour: localH, pct: Math.exp(1.28 * sdFor(((localH - offsetH) % 24 + 24) % 24).sd) - 1 }));
   const rangeDays = new Set(pairs.map(p => Math.round(p.actual))).size;
@@ -397,6 +410,7 @@ export async function computeDayView(now = new Date()): Promise<DayForecastView>
     fromTodayPosts, fromTails: Math.max(dn.value - fromTodayPosts, 0), regime,
     postByLocal: fmtLocalTime(postByUtc, tz),
     rangePct: Math.exp(1.28 * here.sd) - 1, rangeByHour, rangeSource: here.measured ? 'measured' : 'prior', rangeDays,
+    method: usePosts ? 'posts' : 'curve',
   };
   return view;
 }

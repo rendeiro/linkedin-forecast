@@ -194,4 +194,5 @@ export interface DayForecastView {
   rangeSource: 'measured' | 'prior';
   rangeDays: number;            // closed days behind the measured range
   method: 'posts' | 'curve';    // posts: today's count plus each live post's remaining gain; curve: day share
+  breakdown: { urn: string; label: string; hours: number; remaining: number; capped: boolean }[];
 }

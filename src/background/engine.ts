@@ -379,12 +379,23 @@ export async function computeDayView(now = new Date()): Promise<DayForecastView>
   // using each post's real publish time. The day curve alone assumes the main post went out
   // at the account's usual hour, which understates late posts.
   let remaining = 0, liveN = 0;
+  const breakdown: DayForecastView['breakdown'] = [];
+  const hToMid = 24 - u;
   for (const p of (await allPosts()).filter(p => hoursBetween(p.publishedAt, now) < 48 && hoursBetween(p.publishedAt, now) >= 0)) {
     const v = await computePostView(p.urn, undefined, now);
     if (!v) continue;
     liveN++;
-    remaining += Math.max(v.point - v.impressions, 0);
+    let r = Math.max(v.point - v.impressions, 0);
+    let capped = false;
+    // Past the 24h mark the curve's tail is an assumption; the post's own measured rate is not.
+    if (v.hours > 24 && v.gainPerHour !== undefined) {
+      const byRate = Math.max(v.gainPerHour, 0) * hToMid;
+      if (byRate < r) { r = byRate; capped = true; }
+    }
+    remaining += r;
+    breakdown.push({ urn: p.urn, label: (p.textPreview ?? `Post from ${fmtLocalTime(p.publishedAt, tz)}`).replace(/\s+/g, ' ').slice(0, 40), hours: v.hours, remaining: r, capped });
   }
+  breakdown.sort((a, b) => b.remaining - a.remaining);
   const usePosts = liveN > 0 && dn.source !== 'none';
   const point = usePosts ? dn.value + remaining : curve.point;
   const f = { point, low: point * Math.exp(-1.28 * here.sd), high: point * Math.exp(1.28 * here.sd), share: curve.share };
@@ -410,7 +421,7 @@ export async function computeDayView(now = new Date()): Promise<DayForecastView>
     fromTodayPosts, fromTails: Math.max(dn.value - fromTodayPosts, 0), regime,
     postByLocal: fmtLocalTime(postByUtc, tz),
     rangePct: Math.exp(1.28 * here.sd) - 1, rangeByHour, rangeSource: here.measured ? 'measured' : 'prior', rangeDays,
-    method: usePosts ? 'posts' : 'curve',
+    method: usePosts ? 'posts' : 'curve', breakdown,
   };
   return view;
 }

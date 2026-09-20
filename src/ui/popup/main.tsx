@@ -75,6 +75,7 @@ function Today({ s, reload }: { s: State; reload: () => void }) {
       <div class="big">{none ? '–' : fmt(t.dailyNow)} <span class="dim" style="font-size:15px; font-weight:400">now</span></div>
       {!none && !t.early && <div style="margin-top:4px"><b>{fmt(t.point)}</b> by end of day <span class="dim">({fmt(t.low)} to {fmt(t.high)})</span></div>}
       {!none && !t.early && <RangeNote t={t} />}
+      {!none && !t.early && t.method === 'posts' && <Breakdown t={t} />}
       {!none && t.early && <div class="dim" style="margin-top:4px">End of day estimate from 06:00 UTC.</div>}
       {none && <div class="note" style="margin-top:8px">No reading for today yet. Open <a href={s.analyticsUrl} target="_blank">your analytics</a> once.</div>}
 
@@ -128,6 +129,24 @@ function RangeNote({ t }: { t: DayForecastView }) {
   return (
     <div class="dim" style="font-size:12px; margin-top:2px" title={`${t.rangeSource === 'measured' ? `Measured from your last ${t.rangeDays} closed days` : 'Prior curve, not yet measured on your days'}. Detail in the Accuracy tab.`}>
       {t.method === 'posts' ? 'Today so far plus what each live post still earns. ' : 'From the day curve, no live post read yet. '}Range ±{Math.round(t.rangePct * 100)}% at this hour{later ? `, about ±${Math.round(later.pct * 100)}% by ${String(later.localHour).padStart(2, '0')}:00` : ''}.
+    </div>
+  );
+}
+
+/** Where the end-of-day number comes from: now plus each live post's remaining gain. */
+function Breakdown({ t }: { t: DayForecastView }) {
+  const [open, setOpen] = useState(false);
+  const rem = t.breakdown.reduce((a, b) => a + b.remaining, 0);
+  return (
+    <div style="font-size:12px; margin-top:4px">
+      <a href="#" class="dim" onClick={e => { e.preventDefault(); setOpen(!open); }}>{fmt(t.dailyNow)} now + {fmt(rem)} still to come from {t.breakdown.length} live post{t.breakdown.length === 1 ? '' : 's'} {open ? '▴' : '▾'}</a>
+      {open && (
+        <table class="scn" style="margin-top:4px">
+          <tbody>
+            {t.breakdown.map(b => <tr><td class="dim">{b.label} <span style="opacity:.7">· {b.hours < 24 ? b.hours.toFixed(1) + 'h' : Math.round(b.hours) + 'h'}</span></td><td class="n">+{fmt(b.remaining)}{b.capped ? <span title="Capped at the post's measured hourly rate times the hours left"> ·</span> : ''}</td></tr>)}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }

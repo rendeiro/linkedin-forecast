@@ -5,7 +5,7 @@
   "description": "Chrome MV3 extension that forecasts your LinkedIn impressions from pages you already visit. Local only.",
   "type": "module",
   "scripts": {
-    "build": "node scripts/build.mjs",
+    "build": "tsc --noEmit && node scripts/build.mjs",
     "watch": "node scripts/build.mjs --watch",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",

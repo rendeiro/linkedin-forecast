@@ -10,7 +10,7 @@ interface State { settings: Settings; timezone?: string; model: { regime: string
 function App() {
   const [s, setS] = useState<State | null>(null);
   const [msg, setMsg] = useState('');
-  const [debug, setDebug] = useState<{ snapshots: Snapshot[]; daily: Daily[]; posts: Post[]; nudges: NudgeRecord[] } | null>(null);
+  const [debug, setDebug] = useState<{ snapshots: Snapshot[]; daily: Daily[]; posts: Post[]; nudges: NudgeRecord[]; log: { at: string; kind: string; message: string }[] } | null>(null);
   const load = () => rpc<State>({ type: 'ui:getState' }).then(setS);
   useEffect(() => { load(); }, []);
   if (!s) return <div class="dim">Loading…</div>;
@@ -114,6 +114,8 @@ function App() {
         <h2>Snapshots (last {debug.snapshots.length})</h2>
         <table><thead><tr><th>Observed</th><th>URN</th><th class="n">Impressions</th><th>Source</th></tr></thead>
           <tbody>{debug.snapshots.slice(-60).reverse().map(x => <tr><td>{x.observedAt.slice(0, 16)}</td><td>{x.urn}</td><td class="n">{fmt(x.impressions)}</td><td>{x.source}</td></tr>)}</tbody></table>
+        <h2>Log (last {debug.log.length})</h2>
+        <pre>{debug.log.slice().reverse().map(l => `${l.at.slice(5, 19).replace('T', ' ')}  ${l.kind.padEnd(9)} ${l.message}`).join('\n')}</pre>
         <h2>Nudges ({debug.nudges.length})</h2>
         <table><tbody>{debug.nudges.slice(-20).reverse().map(n => <tr><td>{n.firedAt.slice(0, 16)}</td><td>{n.type}</td><td>{n.text}</td></tr>)}</tbody></table>
       </>)}

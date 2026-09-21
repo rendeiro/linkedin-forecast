@@ -1,4 +1,4 @@
-import { render } from 'preact';
+import { render, Component, type ComponentChildren } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
 import { rpc } from '../rpc';
 import { fmt, pct } from '../../shared/numbers';
@@ -20,14 +20,24 @@ const REGIME_TIP: Record<string, string> = {
   fitted: '30 or more posts with actuals. Curves are fitted to this account.',
 };
 
+/** Any render error shows inside the popup instead of a blank panel. */
+class Boundary extends Component<{ children: ComponentChildren }, { error?: Error }> {
+  state = { error: undefined as Error | undefined };
+  componentDidCatch(error: Error) { this.setState({ error }); console.error('[lif] popup render failed', error); }
+  render() {
+    if (this.state.error) return <section><b>This view failed to render.</b><pre>{String(this.state.error.message)}{'\n'}{String(this.state.error.stack ?? '').split('\n').slice(0, 4).join('\n')}</pre><div class="dim">Copy this text and paste it to me.</div></section>;
+    return this.props.children;
+  }
+}
+
 function App() {
   const [s, setS] = useState<State | null>(null);
   const initial = (location.hash.slice(1) || 'today') as Tab;
   const [tab, setTab] = useState<Tab>((TABS as readonly string[]).includes(initial) ? initial : 'today');
   const [err, setErr] = useState('');
-  const load = () => rpc<State>({ type: 'ui:getState' }).then(setS).catch(e => setErr(String(e)));
+  const load = () => rpc<State & { error?: string; stack?: string }>({ type: 'ui:getState' }).then(r => { if (r && r.error) setErr(`${r.error}\n${r.stack ?? ''}`); else setS(r); }).catch(e => setErr(String(e)));
   useEffect(() => { load(); const t = setInterval(load, 20000); return () => clearInterval(t); }, []);
-  if (err) return <section><b>Cannot reach the background worker.</b><div class="dim">{err}</div></section>;
+  if (err) return <section><b>The background worker returned an error.</b><pre>{err}</pre><div class="dim">Copy this text and paste it to me.</div></section>;
   if (!s) return <section class="dim">Loading…</section>;
   if (!s.onboarding.done) return <OnboardingView s={s} reload={load} />;
   return (
@@ -39,10 +49,12 @@ function App() {
       <nav>
         {TABS.map(t => <button class={tab === t ? 'on' : ''} onClick={() => setTab(t)}>{t[0].toUpperCase() + t.slice(1)}</button>)}
       </nav>
-      {tab === 'today' && <Today s={s} reload={load} />}
-      {tab === 'posts' && <Posts s={s} />}
-      {tab === 'accuracy' && <Accuracy s={s} />}
-      {tab === 'health' && <Health s={s} reload={load} />}
+      <Boundary>
+        {tab === 'today' && <Today s={s} reload={load} />}
+        {tab === 'posts' && <Posts s={s} />}
+        {tab === 'accuracy' && <Accuracy s={s} />}
+        {tab === 'health' && <Health s={s} reload={load} />}
+      </Boundary>
     </>
   );
 }
@@ -125,7 +137,7 @@ function Today({ s, reload }: { s: State; reload: () => void }) {
 
 /** Why the range is what it is right now, and where it goes through the day. */
 function RangeNote({ t }: { t: DayForecastView }) {
-  const later = t.rangeByHour.filter(r => r.pct < t.rangePct * 0.6).sort((a, b) => a.localHour - b.localHour)[0];
+  const later = (t.rangeByHour ?? []).filter(r => r.pct < t.rangePct * 0.6).sort((a, b) => a.localHour - b.localHour)[0];
   return (
     <div class="dim" style="font-size:12px; margin-top:2px" title={`${t.rangeSource === 'measured' ? `Measured from your last ${t.rangeDays} closed days` : 'Prior curve, not yet measured on your days'}. Detail in the Accuracy tab.`}>
       Range ±{Math.round(t.rangePct * 100)}% at this hour{later ? `, about ±${Math.round(later.pct * 100)}% by ${String(later.localHour).padStart(2, '0')}:00` : ''}.
@@ -136,9 +148,10 @@ function RangeNote({ t }: { t: DayForecastView }) {
 /** Where the end-of-day number comes from: now plus each live post's remaining gain. */
 function Breakdown({ t }: { t: DayForecastView }) {
   const [open, setOpen] = useState(false);
-  const posts = t.breakdown.filter(b => b.hours >= 0);
-  const curve = t.breakdown.find(b => b.hours === -1);
-  const postsTotal = t.breakdown.find(b => b.hours === -2);
+  const bd = t.breakdown ?? [];
+  const posts = bd.filter(b => b.hours >= 0);
+  const curve = bd.find(b => b.hours === -1);
+  const postsTotal = bd.find(b => b.hours === -2);
   return (
     <div style="font-size:12px; margin-top:4px">
       <a href="#" class="dim" onClick={e => { e.preventDefault(); setOpen(!open); }}>How this number is built {open ? '▴' : '▾'}</a>
@@ -157,11 +170,11 @@ function Breakdown({ t }: { t: DayForecastView }) {
 }
 
 function RangeByHour({ t }: { t: DayForecastView }) {
-  const max = Math.max(...t.rangeByHour.map(r => r.pct), 0.05);
+  const max = Math.max(...(t.rangeByHour ?? []).map(r => r.pct), 0.05);
   return (
     <div>
       <div class="hours">
-        {t.rangeByHour.map(r => (
+        {(t.rangeByHour ?? []).map(r => (
           <div class="hour"><i style={`height:${Math.max(6, (r.pct / max) * 100)}%`} /><span>±{Math.round(r.pct * 100)}%</span><small>{String(r.localHour).padStart(2, '0')}</small></div>
         ))}
       </div>

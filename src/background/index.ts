@@ -4,7 +4,7 @@ import {
   ingestSnapshot, ingestDaily, ingestTotal7, ingestPosts, ingestFollowers, computePostView, computeDayView, livePosts,
   accuracyStats, onNewPost, initModelFromData, goalSuggestion, logDayForecasts, ensurePost, dayHistory, rebuildModel, goalView,
 } from './engine';
-import { getSettings, setSettings, getModel, setModel, getOnboarding, setOnboarding, getHealth, timezone, getLocal, setLocal } from './state';
+import { getSettings, setSettings, getModel, setModel, getOnboarding, setOnboarding, getHealth, timezone, getLocal, setLocal, logEvent } from './state';
 import { allDaily, allPosts, allSnapshots, dumpAll, restoreAll, clearAll, putDaily, putPost, getPost, addSnapshot, putFollower, allNudges, type Dump } from './store';
 import { scheduleAlarms, runAnalyticsVisit, runPostVisits, forcedPostVisit, resolveVisit, recordHealth, avStatus, ANALYTICS_URL, postSummaryUrl } from './autovisit';
 import { goldenHourCheck, goldenHourClose, secondPostCheck, morningPlan, scorecard, onNotificationClick } from './nudges';
@@ -37,6 +37,7 @@ onNewPost(async (post: Post) => {
 
 chrome.alarms.onAlarm.addListener(async alarm => {
   const [name, arg] = alarm.name.split(':');
+  await logEvent('alarm', alarm.name);
   try {
     switch (name) {
       case 'av-analytics': return void (await runAnalyticsVisit());
@@ -56,7 +57,7 @@ chrome.alarms.onAlarm.addListener(async alarm => {
       case 'daily-second': await secondPostCheck(); return void (await scheduleDailyAlarms());
       case 'tick': return void (await logDayForecasts());
     }
-  } catch (e) { console.warn('[lif] alarm failed', alarm.name, e); }
+  } catch (e) { console.warn('[lif] alarm failed', alarm.name, e); await logEvent('error', `alarm ${alarm.name}: ${String(e)}`); }
 });
 
 async function ensureModelVersion() {
@@ -97,7 +98,7 @@ export type UiMessage =
 type AnyMessage = ContentMessage | UiMessage;
 
 chrome.runtime.onMessage.addListener((msg: AnyMessage, sender, sendResponse) => {
-  handle(msg, sender).then(sendResponse, e => { console.warn('[lif] handler failed', msg.type, e); sendResponse({ error: String(e) }); });
+  handle(msg, sender).then(sendResponse, e => { console.warn('[lif] handler failed', msg.type, e); void logEvent('error', `${msg.type}: ${String(e)}`); sendResponse({ error: String(e), stack: e instanceof Error ? e.stack : undefined }); });
   return true;
 });
 
@@ -159,7 +160,7 @@ async function handle(msg: AnyMessage, sender: chrome.runtime.MessageSender): Pr
       return { ok: true };
     }
     case 'ui:rebuild': { const r = await rebuildModel(); await setLocal('modelRebuilt', MODEL_VERSION); return { ok: true, ...r }; }
-    case 'ui:debug': return { snapshots: (await allSnapshots()).slice(-200), daily: await allDaily(), posts: await allPosts(), nudges: await allNudges() };
+    case 'ui:debug': return { snapshots: (await allSnapshots()).slice(-200), daily: await allDaily(), posts: await allPosts(), nudges: await allNudges(), log: await getLocal('log', []) };
   }
   return { error: 'unknown message' };
 }

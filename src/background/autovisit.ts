@@ -1,6 +1,6 @@
 /** §3.3 auto-visit: background tabs to the user's own pages, backoff, daily cap. */
 import type { PageType, Settings } from '../shared/types';
-import { getLocal, setLocal, getSettings, getHealth, setHealth, timezone } from './state';
+import { getLocal, setLocal, getSettings, getHealth, setHealth, timezone, logEvent } from './state';
 import { allPosts } from './store';
 import { hoursBetween, inQuietHours, localHour, utcDateOf } from '../shared/time';
 
@@ -34,9 +34,10 @@ export async function visit(url: string, page: PageType, now = new Date()): Prom
   const tz = await timezone();
   if (inQuietHours(localHour(now, tz), settings.quietHours.start, settings.quietHours.end)) return false;
   const st = await getState(now);
-  if (st.count >= DAILY_CAP) return false;
+  if (st.count >= DAILY_CAP) { await logEvent('autovisit', `daily cap reached, skipped ${page}`); return false; }
   st.count++;
   await setLocal('autovisit', st);
+  await logEvent('autovisit', `visit ${page} (${st.count}/${DAILY_CAP} today)`);
 
   let tabId: number | undefined;
   let ok = false;
@@ -54,11 +55,15 @@ export async function visit(url: string, page: PageType, now = new Date()): Prom
     if (tabId !== undefined) { try { await chrome.tabs.remove(tabId); } catch { /* already closed */ } }
   }
   const after = await getState(new Date());
+  const backoffBefore = after.backoff;
   if (ok) { after.failures = 0; after.backoff = 1; after.lastOkAt = new Date().toISOString(); }
   else { after.failures++; after.backoff = Math.min(after.backoff * 2, 8); after.lastFailAt = new Date().toISOString(); }
   await setLocal('autovisit', after);
   await updateBadge(after);
-  await scheduleAlarms(settings, after);
+  await logEvent('autovisit', `${page} ${ok ? 'ok' : 'failed'}${after.backoff !== backoffBefore ? `, backoff ${backoffBefore}x to ${after.backoff}x` : ''}`);
+  // Only touch the schedule when the backoff changed. Re-creating alarms after every visit
+  // restarted them with a one-minute delay, which is what made tabs open back to back.
+  if (after.backoff !== backoffBefore) await scheduleAlarms(settings, after);
   return ok;
 }
 
@@ -82,8 +87,10 @@ export async function scheduleAlarms(settings?: Settings, st?: AvState) {
   const cap = 240;
   const a = Math.min(s.autoVisit.analyticsMin * state.backoff, cap);
   const p = Math.min(s.autoVisit.postMin * state.backoff, cap);
-  await chrome.alarms.create('av-analytics', { delayInMinutes: 1, periodInMinutes: Math.max(a, 5) });
-  await chrome.alarms.create('av-posts', { delayInMinutes: 2, periodInMinutes: Math.max(p, 5) });
+  // First run after the full period, not after a minute: reloads and settings edits must not trigger a burst.
+  await chrome.alarms.create('av-analytics', { delayInMinutes: Math.max(a, 5), periodInMinutes: Math.max(a, 5) });
+  await chrome.alarms.create('av-posts', { delayInMinutes: Math.max(p, 5), periodInMinutes: Math.max(p, 5) });
+  await logEvent('autovisit', `schedule: analytics every ${Math.max(a, 5)} min, posts every ${Math.max(p, 5)} min`);
 }
 
 export async function runAnalyticsVisit() {

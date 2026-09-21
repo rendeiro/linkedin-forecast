@@ -35,3 +35,10 @@ export async function timezone(): Promise<string | undefined> {
   const o = await getOnboarding();
   return o.timezone;
 }
+
+/** Ring buffer of the last 200 events, readable from the Options page. Never leaves the browser. */
+export async function logEvent(kind: string, message: string) {
+  const entries = await getLocal<{ at: string; kind: string; message: string }[]>('log', []);
+  entries.push({ at: new Date().toISOString(), kind, message });
+  await setLocal('log', entries.slice(-200));
+}

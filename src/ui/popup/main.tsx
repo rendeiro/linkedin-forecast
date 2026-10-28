@@ -161,7 +161,7 @@ function Breakdown({ t }: { t: DayForecastView }) {
             {curve && <tr><td>{curve.label}</td><td class="n"><b>{fmt(curve.remaining)}</b></td></tr>}
             {postsTotal && <tr><td>Posts: {fmt(t.dailyNow)} now + what each still earns</td><td class="n"><b>{fmt(postsTotal.remaining)}</b></td></tr>}
             {posts.map(b => <tr><td class="dim" style="padding-left:12px">{b.label} <span style="opacity:.7">· {b.hours < 24 ? b.hours.toFixed(1) + 'h' : Math.round(b.hours) + 'h'}</span></td><td class="n dim">+{fmt(b.remaining)}{b.capped ? <span title="Capped at the post's measured hourly rate times the hours left"> ·</span> : ''}</td></tr>)}
-            <tr><td>Blend, weighted by how much of the day the curve has seen</td><td class="n"><b>{fmt(t.point)}</b></td></tr>
+            <tr><td>Blend: curve weight grows with the day seen, shrinks when posts have measured slopes</td><td class="n"><b>{fmt(t.point)}</b></td></tr>
           </tbody>
         </table>
       )}

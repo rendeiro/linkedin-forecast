@@ -395,30 +395,30 @@ export async function computeDayView(now = new Date()): Promise<DayForecastView>
   const curve = dailyEod(u, dn.value, { sDay: sDayToday, sd: here.sd });
   // Bottom-up: today's count plus what each live post still earns before UTC midnight, anchored
   // on each post's own count (no pull toward the account median once 3h of data exist).
-  let remaining = 0, liveN = 0;
+  let remaining = 0, liveN = 0, trendRemaining = 0;
   const breakdown: DayForecastView['breakdown'] = [];
   const hToMid = 24 - u;
   for (const p of (await allPosts()).filter(p => hoursBetween(p.publishedAt, now) < 48 && hoursBetween(p.publishedAt, now) >= 0)) {
     const v = await computePostView(p.urn, undefined, now);
     if (!v) continue;
     liveN++;
-    let r: number;
+    // The same projection the Posts tab shows: own slope with curve decay when measured, curve otherwise.
+    let r = Math.max(v.point - v.impressions, 0);
     let capped = false;
-    if (v.hours > 24) {
-      r = Math.max(v.point - v.impressions, 0);
-      if (v.gainPerHour !== undefined) { const byRate = Math.max(v.gainPerHour, 0) * hToMid; if (byRate < r) { r = byRate; capped = true; } }
-    } else {
-      const sNow = shareAt(model.sPost, v.hours);
-      const scale = v.hours >= 3 ? v.impressions / sNow : (v.total24 ?? v.impressions / sNow);
-      r = Math.max(0, (shareAt(model.sPost, v.hours + hToMid) - sNow) * scale);
+    if (v.hours > 24 && v.gainPerHour !== undefined) {
+      const byRate = Math.max(v.gainPerHour, 0) * hToMid;
+      if (byRate < r) { r = byRate; capped = true; }
     }
     remaining += r;
+    if (v.method === 'trend') trendRemaining += r;
     breakdown.push({ urn: p.urn, label: (p.textPreview ?? `Post from ${fmtLocalTime(p.publishedAt, tz)}`).replace(/\s+/g, ' ').slice(0, 40), hours: v.hours, remaining: r, capped });
   }
   breakdown.sort((a, b) => b.remaining - a.remaining);
   const usePosts = liveN > 0 && dn.source !== 'none';
-  // Blend in log space. The more of the day the curve has seen, the more it counts.
-  const wc = usePosts ? Math.min(0.9, Math.max(0.35, curveShare)) : 1;
+  // Blend in log space. The curve counts more the more of the day it has seen, and less when
+  // the posts' projections rest on measured slopes rather than on the prior.
+  const trendCoverage = remaining > 0 ? trendRemaining / remaining : 0;
+  const wc = usePosts ? Math.min(0.9, Math.max(0.35, curveShare)) * (1 - 0.6 * trendCoverage) : 1;
   const postsPoint = dn.value + remaining;
   const point = usePosts && postsPoint > 0 ? Math.exp(wc * Math.log(Math.max(curve.point, 1)) + (1 - wc) * Math.log(postsPoint)) : curve.point;
   const f = { point, low: point * Math.exp(-1.28 * here.sd), high: point * Math.exp(1.28 * here.sd), share: curve.share };

@@ -181,8 +181,9 @@ describe('post trend projection', () => {
     const t = postEodTrend(5, 1000, 6, 1005, 10);
     expect(t.point - 1005).toBeLessThan(60);
   });
-  it('decays: the same slope later in the post life projects less', async () => {
+  it('decays: projects less than carrying the slope flat to midnight', async () => {
     const { postEodTrend } = await import('../src/model/simple');
-    expect(postEodTrend(1, 0, 2, 500, 8).gain).toBeGreaterThan(postEodTrend(10, 0, 11, 500, 8).gain);
+    expect(postEodTrend(1, 0, 2, 500, 8).gain).toBeLessThan(500 * 8);
+    expect(postEodTrend(10, 0, 11, 500, 8).gain).toBeLessThan(500 * 8);
   });
 });

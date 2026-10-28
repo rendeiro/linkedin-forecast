@@ -215,7 +215,7 @@ function Posts({ s }: { s: State }) {
               <div>
                 <div><b>{fmt(p.impressions)}</b> now</div>
                 <div><b>{fmt(p.point)}</b> by end of day</div>
-                <div class="dim" style="font-size:12px">{p.gainPerHour !== undefined ? `${fmt(p.gainPerHour)}/h` : ''}</div>
+                <div class="dim" style="font-size:12px" title={p.method === 'trend' ? 'Projected from this post\'s own slope, fading along the curve' : 'From the share curve and the account prior; no slope measured yet'}>{p.gainPerHour !== undefined ? `${fmt(p.gainPerHour)}/h · ` : ''}{p.method === 'trend' ? 'own slope' : 'curve'}</div>
               </div>
             </div>
           </div>

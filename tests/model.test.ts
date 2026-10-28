@@ -165,3 +165,24 @@ describe('measured day interval', () => {
     expect(measuredDaySd(loose, 15)!.sd).toBeGreaterThan(0.3);
   });
 });
+
+describe('post trend projection', () => {
+  it('a viral post projects from its own slope, far above the prior-shrunk curve', async () => {
+    const { postEodTrend, postEod } = await import('../src/model/simple');
+    // 5,000 at 2h, 3,000 at 1h, 10h to midnight, account median 2,000.
+    const trend = postEodTrend(1, 3000, 2, 5000, 10);
+    const curve = postEod(2, 10, 5000, [2000, 2000, 2000]);
+    expect(trend.point).toBeGreaterThan(curve.point * 1.5);
+    expect(trend.point).toBeCloseTo(5000 + 2000 * (0.87 - 0.30) / (0.30 - 0.18), 0);
+    expect(trend.low).toBeGreaterThanOrEqual(5000);
+  });
+  it('a flat post projects almost nothing', async () => {
+    const { postEodTrend } = await import('../src/model/simple');
+    const t = postEodTrend(5, 1000, 6, 1005, 10);
+    expect(t.point - 1005).toBeLessThan(60);
+  });
+  it('decays: the same slope later in the post life projects less', async () => {
+    const { postEodTrend } = await import('../src/model/simple');
+    expect(postEodTrend(1, 0, 2, 500, 8).gain).toBeGreaterThan(postEodTrend(10, 0, 11, 500, 8).gain);
+  });
+});

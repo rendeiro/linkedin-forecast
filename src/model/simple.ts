@@ -187,6 +187,24 @@ export function postEod(
   };
 }
 
+/**
+ * Trend projection: the post's own measured slope over its last two readings, carried forward
+ * with the curve's decay. gain = observed gain × (share(end) − share(now)) / (share(h2) − share(h1)).
+ * A viral post with a steep slope projects steeply; the curve only says how fast slopes fade.
+ */
+export function postEodTrend(
+  h1: number, v1: number, h2: number, v2: number, hToMidnight: number,
+  opts: { sPost?: Table; sdScale?: number } = {},
+): PostEod {
+  const sPost = opts.sPost ?? S_POST_PRIOR;
+  const sA = shareAt(sPost, Math.max(h1, 0.05)), sB = shareAt(sPost, h2), sEnd = shareAt(sPost, h2 + Math.max(hToMidnight, 0));
+  const observed = Math.max(v2 - v1, 0);
+  const denom = Math.max(sB - sA, 1e-6);
+  const gain = observed * (sEnd - sB) / denom;
+  const sd = 0.08 + 0.45 * (1 - Math.min(sB, 1));
+  return { point: v2 + gain, low: v2 + gain * Math.exp(-Z80 * sd), high: v2 + gain * Math.exp(Z80 * sd), total24: v2 + (observed * (1 - sB) / denom), share: sB, gain };
+}
+
 /** Fallback for recentTotals when fewer than 3 actuals exist: lifetime totals / 1.6. */
 export function recentTotalsOrLifetime(recentTotals: number[], lifetimes: number[]): number[] {
   if (recentTotals.length >= 3) return recentTotals;

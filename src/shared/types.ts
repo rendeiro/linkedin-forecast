@@ -151,6 +151,7 @@ export interface PostForecastView {
   gainPerHour?: number;
   tailMode: boolean;
   status: 'starting' | 'rising' | 'slowing' | 'tail';
+  method: 'trend' | 'curve';  // trend: own slope with curve decay; curve: share curve with account prior
   series: [number, number][];  // [hours since publish, impressions], subsampled
   textPreview?: string;
   regime: Regime;

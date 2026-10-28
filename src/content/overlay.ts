@@ -47,7 +47,7 @@ export async function mountPostOverlay(card: Element, urn: string, view?: PostFo
   }
   const host = place ? ensureHost(place.parent, 'post-' + urn, place.before) : ensureHost(card, 'post-' + urn);
   if (!v) { render(host, 'Forecast pending'); return; }
-  const tip = [v.gainPerHour !== undefined ? `${fmt(v.gainPerHour)} per hour` : '', v.tailMode ? 'tail mode' : '', `80% interval ${fmt(v.low)} to ${fmt(v.high)}`, v.regime].filter(Boolean).join(' · ');
+  const tip = [v.gainPerHour !== undefined ? `${fmt(v.gainPerHour)} per hour` : '', v.method === 'trend' ? 'own slope, curve decay' : 'curve with account prior', v.tailMode ? 'tail mode' : '', `80% interval ${fmt(v.low)} to ${fmt(v.high)}`, v.regime].filter(Boolean).join(' · ');
   render(host, `<b>${fmt(v.impressions)}</b> now${sep}<b>${fmt(v.point)}</b> by end of day`, '', tip);
 }
 

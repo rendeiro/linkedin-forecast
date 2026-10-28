@@ -11,7 +11,7 @@ import {
 } from './store';
 import { getModel, getOnboarding, getSettings, setModel, setOnboarding, timezone } from './state';
 import {
-  dailyEod, dayAhead, evalTail, interp, learnDay, learnDow, learnPost, median, mean, postByHoursBeforeMidnight, postEod, initialModel, secondPostAdd as secondPostAddFn, postTimingScenario, measuredDaySd, priorDaySd, shareAt,
+  dailyEod, dayAhead, evalTail, interp, learnDay, learnDow, learnPost, median, mean, postByHoursBeforeMidnight, postEod, initialModel, secondPostAdd as secondPostAddFn, postTimingScenario, measuredDaySd, priorDaySd, shareAt, postEodTrend,
   recentTotalsOrLifetime, regimeOf, shiftSDay, typeFactor, MODEL_VERSION, pace as paceOf,
 } from '../model/simple';
 import { resolvePublishedAt } from '../model/urn';
@@ -254,11 +254,18 @@ export async function computePostView(urn: string, snaps?: Snapshot[], now = new
   const hToMidnight = 24 - utcHourOf(now);
   const recent = await recentTotalsFor(model);
   const tf = model.recentTotals.length >= 3 ? typeFactor(model, post.type) : 1;
-  const f = postEod(h, hToMidnight, latest.impressions, recent, { sPost: model.sPost, typeFactor: tf, inNetworkShare: latest.inNetworkShare });
   const points: [number, number][] = ss.map(s => [hoursBetween(post.publishedAt, s.observedAt), s.impressions]);
   let gainPerHour: number | undefined;
-  const earlier = [...ss].reverse().find(s => hoursBetween(s.observedAt, latest.observedAt) >= 20 / 60);
+  // Slope window: the latest reading and the most recent one at least 20 minutes before it, within 6 hours.
+  const earlier = [...ss].reverse().find(s => { const d = hoursBetween(s.observedAt, latest.observedAt); return d >= 20 / 60 && d <= 6; });
   if (earlier) gainPerHour = (latest.impressions - earlier.impressions) / hoursBetween(earlier.observedAt, latest.observedAt);
+  // Trend when the post has a measured slope; the share curve with the account prior otherwise.
+  const curveF = postEod(h, hToMidnight, latest.impressions, recent, { sPost: model.sPost, typeFactor: tf, inNetworkShare: latest.inNetworkShare });
+  const h2 = Math.max(hoursBetween(post.publishedAt, latest.observedAt), 0.05);
+  const staleH = Math.max(hoursBetween(latest.observedAt, now), 0);
+  const trendF = earlier ? postEodTrend(hoursBetween(post.publishedAt, earlier.observedAt), earlier.impressions, h2, latest.impressions, hToMidnight + staleH, { sPost: model.sPost }) : null;
+  const f = trendF ?? curveF;
+  const method: PostForecastView['method'] = trendF ? 'trend' : 'curve';
   const tail = evalTail(points, h);
   const regime: Regime = regimeOf(model.nPostActuals);
   const ratio = tail.firstHourGain > 0 ? tail.lastHourGain / tail.firstHourGain : 1;
@@ -267,7 +274,7 @@ export async function computePostView(urn: string, snaps?: Snapshot[], now = new
   const series = points.filter((_, i) => i % step === 0 || i === points.length - 1);
   const view: PostForecastView = {
     urn, publishedAt: post.publishedAt, hours: h, impressions: latest.impressions,
-    point: f.point, low: f.low, high: f.high, total24: f.total24, gainPerHour, tailMode: tail.tailMode, status, series, textPreview: post.textPreview,
+    point: f.point, low: f.low, high: f.high, total24: f.total24, gainPerHour, tailMode: tail.tailMode, status, method, series, textPreview: post.textPreview,
     regime, type: post.type, observedAt: latest.observedAt,
   };
   if (h < 24 && !post.actual24h && hoursBetween(latest.observedAt, now) < 6) {
